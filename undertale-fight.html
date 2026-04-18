@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Undertale Fight</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Press Start 2P', monospace; }
+  canvas { display: block; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 640;
+canvas.height = 480;
+
+// ── Constants ──
+const WHITE = '#fff';
+const BLACK = '#000';
+const RED = '#ff0000';
+const YELLOW = '#ffff00';
+const ORANGE = '#ff6600';
+const CYAN = '#00ffff';
+const BLUE = '#0000ff';
+const GREEN = '#00ff00';
+
+// ── Fonts ──
+const FONT_SM = '14px "Press Start 2P", monospace';
+const FONT_MD = '16px "Press Start 2P", monospace';
+const FONT_LG = '20px "Press Start 2P", monospace';
+
+// ── Soul / Player ──
+const soul = { x: 320, y: 340, size: 16, speed: 3, iFrames: 0 };
+let hp = 20, maxHp = 20;
+let lv = 1;
+
+// ── Enemy ──
+const enemy = {
+  name: 'FLOWEY',
+  hp: 80, maxHp: 80,
+  atk: 8, def: 2,
+  x: 320, y: 100,
+  bobT: 0,
+  shakeT: 0,
+  dialogue: [
+    "In this world...\nit's KILL or BE killed!",
+    "You IDIOT!",
+    "DIE.",
+    "Why won't you\njust give up?!",
+    "..."
+  ],
+  dialogueIdx: 0
+};
+
+// ── Battle Box ──
+const box = { x: 170, y: 250, w: 300, h: 150 };
+const boxTarget = { x: 170, y: 250, w: 300, h: 150 };
+
+// ── Game State ──
+let state = 'intro'; // intro, menu, fight_anim, enemy_turn, dialogue, victory
+let menuIdx = 0;
+let actIdx = 0;
+let subMenu = null; // null, 'act', 'item', 'mercy'
+let turnCount = 0;
+let dialogueText = '';
+let dialogueTimer = 0;
+let dialogueFullText = '';
+let dialogueCallback = null;
+
+// ── Attack System ──
+let bullets = [];
+let attackTimer = 0;
+let attackDuration = 0;
+let currentAttack = -1;
+
+// ── Fight Animation ──
+let fightSlider = { active: false, x: 0, dir: 1, speed: 5 };
+let fightDamageShow = { active: false, timer: 0, dmg: 0 };
+
+// ── Particles ──
+let particles = [];
+
+// ── Input ──
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  e.preventDefault();
+  handleKeyPress(e.code);
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ── Key Press Handler ──
+function handleKeyPress(code) {
+  if (state === 'intro') {
+    state = 'dialogue';
+    showDialogue("* " + enemy.name + " appeared!", () => { state = 'menu'; });
+    return;
+  }
+
+  if (state === 'dialogue') {
+    if (dialogueTimer < dialogueFullText.length) {
+      dialogueTimer = dialogueFullText.length;
+    } else if (dialogueCallback) {
+      const cb = dialogueCallback;
+      dialogueCallback = null;
+      cb();
+    }
+    return;
+  }
+
+  if (state === 'menu') {
+    if (subMenu === null) {
+      if (code === 'ArrowLeft') menuIdx = Math.max(0, menuIdx - 1);
+      if (code === 'ArrowRight') menuIdx = Math.min(3, menuIdx + 1);
+      if (code === 'KeyZ' || code === 'Enter') {
+        if (menuIdx === 0) startFight();
+        else if (menuIdx === 1) openSubMenu('act');
+        else if (menuIdx === 2) openSubMenu('item');
+        else if (menuIdx === 3) openSubMenu('mercy');
+      }
+    } else {
+      if (code === 'ArrowUp') actIdx = Math.max(0, actIdx - 1);
+      if (code === 'ArrowDown') actIdx = Math.min(getSubMenuItems().length - 1, actIdx + 1);
+      if (code === 'KeyX' || code === 'Escape') { subMenu = null; return; }
+      if (code === 'KeyZ' || code === 'Enter') selectSubMenuItem();
+    }
+    return;
+  }
+
+  if (state === 'fight_anim' && !fightSlider.active && fightDamageShow.active) {
+    return;
+  }
+
+  if (state === 'fight_anim' && fightSlider.active) {
+    if (code === 'KeyZ' || code === 'Enter') resolveFight();
+    return;
+  }
+
+  if (state === 'victory') {
+    if (code === 'KeyZ' || code === 'Enter') {
+      // Reset
+      enemy.hp = enemy.maxHp;
+      enemy.dialogueIdx = 0;
+      hp = maxHp;
+      turnCount = 0;
+      state = 'intro';
+    }
+  }
+}
+
+// ── Sub Menus ──
+function getSubMenuItems() {
+  if (subMenu === 'act') return ['Check', 'Threaten', 'Flirt'];
+  if (subMenu === 'item') return hp < maxHp ? ['Bandage  (+5 HP)'] : ['(empty)'];
+  if (subMenu === 'mercy') return ['Spare', 'Flee'];
+  return [];
+}
+
+function openSubMenu(type) {
+  subMenu = type;
+  actIdx = 0;
+}
+
+function selectSubMenuItem() {
+  const items = getSubMenuItems();
+  if (subMenu === 'act') {
+    subMenu = null;
+    if (actIdx === 0) {
+      showDialogue(`* ${enemy.name} - ATK ${enemy.atk} DEF ${enemy.def}\n* A dangerous flower\n  with a killer smile.`, () => startEnemyTurn());
+      state = 'dialogue';
+    } else if (actIdx === 1) {
+      showDialogue("* You threatened FLOWEY.\n* It doesn't seem to\n  care.", () => startEnemyTurn());
+      state = 'dialogue';
+    } else {
+      showDialogue("* You flirted with FLOWEY.\n* It became uncomfortable.", () => startEnemyTurn());
+      state = 'dialogue';
+    }
+  } else if (subMenu === 'item') {
+    subMenu = null;
+    if (hp < maxHp) {
+      hp = Math.min(maxHp, hp + 5);
+      showDialogue("* You used the Bandage.\n* Healed 5 HP!", () => startEnemyTurn());
+      state = 'dialogue';
+    } else {
+      showDialogue("* You have nothing\n  useful.", () => { state = 'menu'; });
+      state = 'dialogue';
+    }
+  } else if (subMenu === 'mercy') {
+    subMenu = null;
+    if (actIdx === 0) {
+      if (enemy.hp <= enemy.maxHp * 0.2) {
+        showDialogue("* You spared FLOWEY.\n* ...\n* FLOWEY is sparing you.", () => { state = 'victory'; });
+        state = 'dialogue';
+        return;
+      }
+      showDialogue("* You spared FLOWEY.\n* But nothing happened.", () => startEnemyTurn());
+      state = 'dialogue';
+    } else {
+      showDialogue("* You can't flee from\n  this battle!", () => { state = 'menu'; });
+      state = 'dialogue';
+    }
+  }
+}
+
+// ── Fight System ──
+function startFight() {
+  state = 'fight_anim';
+  fightSlider = { active: true, x: box.x, dir: 1, speed: 5 };
+  fightDamageShow = { active: false, timer: 0, dmg: 0 };
+}
+
+function resolveFight() {
+  fightSlider.active = false;
+  const center = box.x + box.w / 2;
+  const dist = Math.abs(fightSlider.x - center);
+  const maxDist = box.w / 2;
+  const accuracy = 1 - (dist / maxDist);
+  const baseDmg = 6 + Math.floor(Math.random() * 4);
+  const dmg = Math.max(1, Math.floor(baseDmg * accuracy * (accuracy > 0.85 ? 2 : 1)));
+  const isCrit = accuracy > 0.85;
+
+  enemy.hp = Math.max(0, enemy.hp - dmg);
+  enemy.shakeT = 20;
+  fightDamageShow = { active: true, timer: 60, dmg, isCrit };
+
+  // Spawn particles
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x: enemy.x + (Math.random() - 0.5) * 60,
+      y: enemy.y + (Math.random() - 0.5) * 60,
+      vx: (Math.random() - 0.5) * 4,
+      vy: (Math.random() - 0.5) * 4,
+      life: 30 + Math.random() * 20,
+      color: isCrit ? YELLOW : WHITE
+    });
+  }
+}
+
+// ── Enemy Turn / Attacks ──
+function startEnemyTurn() {
+  state = 'enemy_turn';
+  turnCount++;
+  bullets = [];
+  attackTimer = 0;
+  currentAttack = turnCount % 5;
+
+  // Reset soul to center
+  soul.x = box.x + box.w / 2;
+  soul.y = box.y + box.h / 2;
+
+  // Set box & duration per attack
+  boxTarget.x = 170; boxTarget.y = 250; boxTarget.w = 300; boxTarget.h = 150;
+
+  switch (currentAttack) {
+    case 0: attackDuration = 300; break; // Pellet circle
+    case 1: attackDuration = 360; break; // Vine walls
+    case 2: attackDuration = 280; break; // Rain
+    case 3: attackDuration = 320; boxTarget.w = 200; boxTarget.x = 220; break; // Small box + bouncing
+    case 4: attackDuration = 350; break; // Spiral
+  }
+
+  // Show enemy dialogue
+  const d = enemy.dialogue[Math.min(enemy.dialogueIdx, enemy.dialogue.length - 1)];
+  enemy.dialogueIdx++;
+  showDialogue("* " + d, () => { state = 'enemy_turn'; });
+  state = 'dialogue';
+}
+
+function spawnAttackBullets() {
+  switch (currentAttack) {
+    case 0: // Friendliness pellets circling in
+      if (attackTimer % 12 === 0) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 180;
+        const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+        bullets.push({
+          type: 'pellet',
+          x: cx + Math.cos(angle) * dist,
+          y: cy + Math.sin(angle) * dist,
+          tx: cx + (Math.random() - 0.5) * box.w * 0.6,
+          ty: cy + (Math.random() - 0.5) * box.h * 0.6,
+          speed: 1.5 + Math.random(),
+          size: 6,
+          color: WHITE
+        });
+      }
+      break;
+
+    case 1: // Vine walls from sides
+      if (attackTimer % 20 === 0) {
+        const fromLeft = Math.random() > 0.5;
+        bullets.push({
+          type: 'vine',
+          x: fromLeft ? box.x : box.x + box.w,
+          y: box.y + Math.random() * box.h,
+          vx: fromLeft ? 2.5 : -2.5,
+          vy: (Math.random() - 0.5) * 1.5,
+          size: 8,
+          color: GREEN
+        });
+      }
+      break;
+
+    case 2: // Rain from top
+      if (attackTimer % 6 === 0) {
+        bullets.push({
+          type: 'rain',
+          x: box.x + Math.random() * box.w,
+          y: box.y - 5,
+          vx: (Math.random() - 0.5) * 0.5,
+          vy: 2.5 + Math.random() * 1.5,
+          size: 5,
+          color: WHITE
+        });
+      }
+      break;
+
+    case 3: // Bouncing bullets in small box
+      if (attackTimer % 40 === 0) {
+        const angle = Math.random() * Math.PI * 2;
+        bullets.push({
+          type: 'bounce',
+          x: box.x + box.w / 2,
+          y: box.y + 10,
+          vx: Math.cos(angle) * 2.5,
+          vy: Math.sin(angle) * 2.5,
+          size: 7,
+          color: ORANGE,
+          bounces: 0
+        });
+      }
+      break;
+
+    case 4: // Spiral from center
+      if (attackTimer % 8 === 0) {
+        const angle = attackTimer * 0.12;
+        const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+        bullets.push({
+          type: 'spiral',
+          x: cx, y: cy,
+          vx: Math.cos(angle) * 2.2,
+          vy: Math.sin(angle) * 2.2,
+          size: 6,
+          color: WHITE
+        });
+      }
+      break;
+  }
+}
+
+function updateBullets() {
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+
+    if (b.type === 'pellet') {
+      const dx = b.tx - b.x, dy = b.ty - b.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 1) { b.x += (dx / d) * b.speed; b.y += (dy / d) * b.speed; }
+    } else if (b.type === 'bounce') {
+      b.x += b.vx; b.y += b.vy;
+      if (b.x - b.size < box.x || b.x + b.size > box.x + box.w) { b.vx *= -1; b.bounces++; }
+      if (b.y - b.size < box.y || b.y + b.size > box.y + box.h) { b.vy *= -1; b.bounces++; }
+      if (b.bounces > 8) { bullets.splice(i, 1); continue; }
+    } else {
+      b.x += b.vx || 0;
+      b.y += b.vy || 0;
+    }
+
+    // Remove out of bounds (except bounce)
+    if (b.type !== 'bounce') {
+      if (b.x < box.x - 30 || b.x > box.x + box.w + 30 || b.y < box.y - 30 || b.y > box.y + box.h + 30) {
+        bullets.splice(i, 1); continue;
+      }
+    }
+
+    // Collision with soul
+    if (soul.iFrames <= 0) {
+      const dx = soul.x - b.x, dy = soul.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < b.size + soul.size / 2 - 2) {
+        hp = Math.max(0, hp - (1 + Math.floor(enemy.atk / 5)));
+        soul.iFrames = 30;
+        // Flash particles
+        for (let j = 0; j < 5; j++) {
+          particles.push({
+            x: soul.x, y: soul.y,
+            vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3,
+            life: 15, color: RED
+          });
+        }
+        bullets.splice(i, 1);
+      }
+    }
+  }
+}
+
+// ── Dialogue System ──
+function showDialogue(text, callback) {
+  dialogueFullText = text;
+  dialogueText = '';
+  dialogueTimer = 0;
+  dialogueCallback = callback;
+}
+
+// ── Draw Helpers ──
+function drawBox() {
+  // Smoothly lerp box
+  box.x += (boxTarget.x - box.x) * 0.1;
+  box.y += (boxTarget.y - box.y) * 0.1;
+  box.w += (boxTarget.w - box.w) * 0.1;
+  box.h += (boxTarget.h - box.h) * 0.1;
+
+  ctx.strokeStyle = WHITE;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(box.x, box.y, box.w, box.h);
+}
+
+function drawSoul() {
+  if (soul.iFrames > 0 && Math.floor(soul.iFrames / 3) % 2 === 0) return;
+
+  ctx.save();
+  ctx.translate(soul.x, soul.y);
+
+  // Heart shape
+  ctx.fillStyle = RED;
+  ctx.beginPath();
+  const s = soul.size / 2;
+  ctx.moveTo(0, s);
+  ctx.bezierCurveTo(-s * 0.8, s * 0.3, -s, -s * 0.3, -s * 0.5, -s);
+  ctx.bezierCurveTo(-s * 0.1, -s * 1.3, s * 0.1, -s * 1.3, s * 0.5, -s);
+  ctx.bezierCurveTo(s, -s * 0.3, s * 0.8, s * 0.3, 0, s);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawEnemy() {
+  const shakeX = enemy.shakeT > 0 ? (Math.random() - 0.5) * 6 : 0;
+  const bobY = Math.sin(enemy.bobT * 0.03) * 5;
+  const ex = enemy.x + shakeX, ey = enemy.y + bobY;
+
+  // Flowey - stem
+  ctx.fillStyle = '#2d8c1a';
+  ctx.fillRect(ex - 4, ey + 20, 8, 40);
+
+  // Leaves
+  ctx.fillStyle = '#3aaf24';
+  ctx.beginPath();
+  ctx.ellipse(ex - 14, ey + 40, 12, 6, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(ex + 14, ey + 38, 12, 6, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Petals
+  const petalCount = 6;
+  for (let i = 0; i < petalCount; i++) {
+    const angle = (i / petalCount) * Math.PI * 2 - Math.PI / 2;
+    ctx.fillStyle = YELLOW;
+    ctx.beginPath();
+    ctx.ellipse(
+      ex + Math.cos(angle) * 22,
+      ey + Math.sin(angle) * 22,
+      14, 10,
+      angle, 0, Math.PI * 2
+    );
+    ctx.fill();
+    ctx.strokeStyle = '#ccaa00';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Face center
+  ctx.fillStyle = '#d4a017';
+  ctx.beginPath();
+  ctx.arc(ex, ey, 18, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eyes
+  const eyeStyle = enemy.hp < enemy.maxHp * 0.3 ? 'angry' : 'normal';
+  ctx.fillStyle = BLACK;
+  if (eyeStyle === 'normal') {
+    ctx.beginPath();
+    ctx.ellipse(ex - 7, ey - 4, 4, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(ex + 7, ey - 4, 4, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Angry eyes
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = BLACK;
+    ctx.beginPath(); ctx.moveTo(ex - 12, ey - 9); ctx.lineTo(ex - 3, ey - 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ex + 12, ey - 9); ctx.lineTo(ex + 3, ey - 3); ctx.stroke();
+    ctx.fillStyle = RED;
+    ctx.beginPath(); ctx.arc(ex - 7, ey - 3, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex + 7, ey - 3, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Mouth
+  ctx.fillStyle = BLACK;
+  if (enemy.hp > enemy.maxHp * 0.5) {
+    // Grinning
+    ctx.beginPath();
+    ctx.arc(ex, ey + 5, 10, 0.1, Math.PI - 0.1);
+    ctx.fill();
+    ctx.fillStyle = '#d4a017';
+    ctx.beginPath();
+    ctx.arc(ex, ey + 4, 10, 0.1, Math.PI - 0.1);
+    ctx.fill();
+    ctx.fillStyle = BLACK;
+    ctx.beginPath();
+    ctx.arc(ex, ey + 6, 8, 0.15, Math.PI - 0.15);
+    ctx.fill();
+  } else {
+    // Grimace
+    ctx.beginPath();
+    ctx.arc(ex, ey + 8, 6, Math.PI + 0.2, -0.2);
+    ctx.fill();
+  }
+
+  // HP bar under enemy
+  const barW = 80, barH = 8, barX = ex - barW / 2, barY = ey + 70;
+  ctx.fillStyle = '#333';
+  ctx.fillRect(barX, barY, barW, barH);
+  const hpRatio = enemy.hp / enemy.maxHp;
+  ctx.fillStyle = hpRatio > 0.5 ? GREEN : hpRatio > 0.2 ? YELLOW : RED;
+  ctx.fillRect(barX, barY, barW * hpRatio, barH);
+  ctx.strokeStyle = WHITE;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+
+  // Enemy name
+  ctx.fillStyle = WHITE;
+  ctx.font = FONT_SM;
+  ctx.textAlign = 'center';
+  ctx.fillText(enemy.name, ex, barY + 22);
+}
+
+function drawMenu() {
+  const menuItems = ['FIGHT', 'ACT', 'ITEM', 'MERCY'];
+  const colors = [ORANGE, YELLOW, GREEN, CYAN];
+  const y = 440;
+
+  for (let i = 0; i < 4; i++) {
+    const x = 80 + i * 140;
+    const selected = menuIdx === i && subMenu === null;
+
+    // Button background
+    ctx.fillStyle = selected ? colors[i] : '#222';
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = 2;
+    const bw = 110, bh = 30;
+    ctx.fillRect(x - bw / 2, y - bh / 2, bw, bh);
+    ctx.strokeRect(x - bw / 2, y - bh / 2, bw, bh);
+
+    // Text
+    ctx.fillStyle = selected ? BLACK : colors[i];
+    ctx.font = FONT_SM;
+    ctx.textAlign = 'center';
+    ctx.fillText(menuItems[i], x, y + 5);
+
+    // Soul cursor
+    if (selected) {
+      ctx.fillStyle = RED;
+      drawHeartAt(x - bw / 2 + 8, y);
+    }
+  }
+
+  // Sub menu
+  if (subMenu) {
+    const items = getSubMenuItems();
+    ctx.fillStyle = BLACK;
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    drawBox();
+
+    ctx.fillStyle = WHITE;
+    ctx.font = FONT_MD;
+    ctx.textAlign = 'left';
+    for (let i = 0; i < items.length; i++) {
+      const ix = box.x + 40, iy = box.y + 35 + i * 30;
+      ctx.fillText(items[i], ix, iy);
+      if (i === actIdx) {
+        ctx.fillStyle = RED;
+        drawHeartAt(ix - 20, iy - 5);
+        ctx.fillStyle = WHITE;
+      }
+    }
+  }
+}
+
+function drawHeartAt(x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  const s = 6;
+  ctx.moveTo(0, s);
+  ctx.bezierCurveTo(-s * 0.8, s * 0.3, -s, -s * 0.3, -s * 0.5, -s);
+  ctx.bezierCurveTo(-s * 0.1, -s * 1.3, s * 0.1, -s * 1.3, s * 0.5, -s);
+  ctx.bezierCurveTo(s, -s * 0.3, s * 0.8, s * 0.3, 0, s);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHUD() {
+  const y = 465;
+  ctx.font = FONT_SM;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = WHITE;
+  ctx.fillText(`LV ${lv}`, 20, y);
+
+  // HP text
+  ctx.fillText('HP', 100, y);
+
+  // HP bar
+  const barX = 140, barW = 120, barH = 16;
+  ctx.fillStyle = RED;
+  ctx.fillRect(barX, y - 12, barW, barH);
+  ctx.fillStyle = YELLOW;
+  ctx.fillRect(barX, y - 12, barW * (hp / maxHp), barH);
+
+  ctx.fillStyle = WHITE;
+  ctx.fillText(`${hp} / ${maxHp}`, barX + barW + 10, y);
+}
+
+function drawDialogue() {
+  // Box
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(box.x - 5, box.y - 5, box.w + 10, box.h + 10);
+  ctx.strokeStyle = WHITE;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+  // Text with typewriter effect
+  dialogueTimer = Math.min(dialogueTimer + 0.8, dialogueFullText.length);
+  const shown = dialogueFullText.substring(0, Math.floor(dialogueTimer));
+
+  ctx.fillStyle = WHITE;
+  ctx.font = FONT_MD;
+  ctx.textAlign = 'left';
+  const lines = shown.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], box.x + 20, box.y + 30 + i * 28);
+  }
+
+  // Blinking advance arrow
+  if (dialogueTimer >= dialogueFullText.length && Math.floor(Date.now() / 400) % 2 === 0) {
+    ctx.fillStyle = WHITE;
+    ctx.beginPath();
+    ctx.moveTo(box.x + box.w - 25, box.y + box.h - 20);
+    ctx.lineTo(box.x + box.w - 15, box.y + box.h - 12);
+    ctx.lineTo(box.x + box.w - 25, box.y + box.h - 4);
+    ctx.fill();
+  }
+}
+
+function drawFightAnim() {
+  // Draw the fight slider bar
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  drawBox();
+
+  if (fightSlider.active) {
+    // Target zone in center
+    const centerX = box.x + box.w / 2;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(centerX - 15, box.y + 10, 30, box.h - 20);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(centerX - 5, box.y + 10, 10, box.h - 20);
+
+    // Moving bar
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(fightSlider.x - 3, box.y + 5, 6, box.h - 10);
+  }
+
+  // Damage display
+  if (fightDamageShow.active) {
+    const dmgY = enemy.y - 20 - (60 - fightDamageShow.timer) * 0.5;
+    ctx.font = fightDamageShow.isCrit ? 'bold 28px "Press Start 2P", monospace' : FONT_LG;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = fightDamageShow.isCrit ? YELLOW : RED;
+    ctx.fillText(`${fightDamageShow.dmg}`, enemy.x, dmgY);
+    if (fightDamageShow.isCrit) {
+      ctx.font = FONT_SM;
+      ctx.fillText('CRITICAL!', enemy.x, dmgY - 25);
+    }
+  }
+}
+
+function drawBullets() {
+  for (const b of bullets) {
+    ctx.fillStyle = b.color;
+    if (b.type === 'pellet') {
+      // Friendliness pellet - small diamond
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-b.size / 2, -b.size / 2, b.size, b.size);
+      ctx.restore();
+    } else if (b.type === 'vine') {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+      ctx.fill();
+      // Thorns
+      ctx.fillStyle = '#1a5c10';
+      for (let t = 0; t < 3; t++) {
+        const a = t * 2.1;
+        ctx.fillRect(b.x + Math.cos(a) * b.size, b.y + Math.sin(a) * b.size, 3, 3);
+      }
+    } else if (b.type === 'bounce') {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillRect(b.x - b.size / 2, b.y - b.size / 2, b.size, b.size);
+    }
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / 50;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawIntro() {
+  ctx.fillStyle = WHITE;
+  ctx.font = FONT_LG;
+  ctx.textAlign = 'center';
+  ctx.fillText('UNDERTALE FIGHT', canvas.width / 2, canvas.height / 2 - 20);
+  ctx.font = FONT_SM;
+  ctx.fillText('Press Z or Enter', canvas.width / 2, canvas.height / 2 + 20);
+  ctx.fillText('Arrow keys to move / select', canvas.width / 2, canvas.height / 2 + 50);
+}
+
+function drawVictory() {
+  ctx.fillStyle = WHITE;
+  ctx.font = FONT_LG;
+  ctx.textAlign = 'center';
+  ctx.fillText('YOU WON!', canvas.width / 2, canvas.height / 2 - 30);
+  ctx.font = FONT_SM;
+  ctx.fillText('* You earned 0 EXP', canvas.width / 2, canvas.height / 2 + 10);
+  ctx.fillText('* and 0 gold.', canvas.width / 2, canvas.height / 2 + 35);
+  ctx.fillText('Press Z to play again', canvas.width / 2, canvas.height / 2 + 70);
+}
+
+function drawGameOver() {
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Broken heart pieces
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2 - 40);
+
+  ctx.fillStyle = RED;
+  // Left half
+  ctx.beginPath();
+  const s = 20;
+  ctx.moveTo(-2, s);
+  ctx.bezierCurveTo(-s * 0.8, s * 0.3, -s, -s * 0.3, -s * 0.5, -s);
+  ctx.bezierCurveTo(-s * 0.1, -s * 1.3, 0, -s * 0.8, -2, 0);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(2, s);
+  ctx.bezierCurveTo(s * 0.8, s * 0.3, s, -s * 0.3, s * 0.5, -s);
+  ctx.bezierCurveTo(s * 0.1, -s * 1.3, 0, -s * 0.8, 2, 0);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = WHITE;
+  ctx.font = FONT_LG;
+  ctx.textAlign = 'center';
+  ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 + 30);
+  ctx.font = FONT_SM;
+
+  if (Math.floor(Date.now() / 600) % 2 === 0) {
+    ctx.fillText('Press Z to try again', canvas.width / 2, canvas.height / 2 + 65);
+  }
+}
+
+// ── Main Update ──
+function update() {
+  enemy.bobT++;
+  if (enemy.shakeT > 0) enemy.shakeT--;
+
+  // Particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].x += particles[i].vx;
+    particles[i].y += particles[i].vy;
+    particles[i].life--;
+    if (particles[i].life <= 0) particles.splice(i, 1);
+  }
+
+  if (soul.iFrames > 0) soul.iFrames--;
+
+  if (state === 'fight_anim') {
+    if (fightSlider.active) {
+      fightSlider.x += fightSlider.dir * fightSlider.speed;
+      if (fightSlider.x > box.x + box.w) fightSlider.dir = -1;
+      if (fightSlider.x < box.x) fightSlider.dir = 1;
+    }
+    if (fightDamageShow.active) {
+      fightDamageShow.timer--;
+      if (fightDamageShow.timer <= 0) {
+        fightDamageShow.active = false;
+        if (enemy.hp <= 0) {
+          showDialogue("* You defeated FLOWEY!", () => { state = 'victory'; });
+          state = 'dialogue';
+        } else {
+          startEnemyTurn();
+        }
+      }
+    }
+  }
+
+  if (state === 'enemy_turn') {
+    attackTimer++;
+    spawnAttackBullets();
+    updateBullets();
+
+    // Move soul
+    const spd = soul.speed;
+    let nx = soul.x, ny = soul.y;
+    if (keys['ArrowLeft']) nx -= spd;
+    if (keys['ArrowRight']) nx += spd;
+    if (keys['ArrowUp']) ny -= spd;
+    if (keys['ArrowDown']) ny += spd;
+
+    // Clamp to box
+    const hs = soul.size / 2;
+    soul.x = Math.max(box.x + hs, Math.min(box.x + box.w - hs, nx));
+    soul.y = Math.max(box.y + hs, Math.min(box.y + box.h - hs, ny));
+
+    // End turn
+    if (attackTimer >= attackDuration) {
+      bullets = [];
+      // Reset box
+      boxTarget.x = 170; boxTarget.y = 250; boxTarget.w = 300; boxTarget.h = 150;
+      state = 'menu';
+      subMenu = null;
+    }
+
+    // Game over check
+    if (hp <= 0) {
+      state = 'gameover';
+      bullets = [];
+    }
+  }
+}
+
+// ── Main Draw ──
+function draw() {
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (state === 'intro') {
+    drawEnemy();
+    drawIntro();
+    return;
+  }
+
+  if (state === 'gameover') {
+    drawGameOver();
+    return;
+  }
+
+  if (state === 'victory') {
+    drawVictory();
+    return;
+  }
+
+  // Draw enemy
+  drawEnemy();
+
+  // Draw based on state
+  if (state === 'menu') {
+    if (!subMenu) {
+      ctx.fillStyle = BLACK;
+      ctx.fillRect(box.x - 5, box.y - 5, box.w + 10, box.h + 10);
+      drawBox();
+    }
+    drawMenu();
+  } else if (state === 'dialogue') {
+    drawDialogue();
+  } else if (state === 'fight_anim') {
+    drawFightAnim();
+  } else if (state === 'enemy_turn') {
+    ctx.fillStyle = BLACK;
+    ctx.fillRect(box.x - 2, box.y - 2, box.w + 4, box.h + 4);
+    drawBox();
+    drawBullets();
+    drawSoul();
+  }
+
+  drawParticles();
+  drawHUD();
+
+  // Draw menu buttons except during fight_anim
+  if (state !== 'fight_anim' && state !== 'dialogue') {
+    drawMenu();
+  }
+}
+
+// ── Game Loop ──
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Handle game over restart
+document.addEventListener('keydown', e => {
+  if (state === 'gameover' && (e.code === 'KeyZ' || e.code === 'Enter')) {
+    hp = maxHp;
+    enemy.hp = enemy.maxHp;
+    enemy.dialogueIdx = 0;
+    turnCount = 0;
+    state = 'menu';
+    subMenu = null;
+  }
+});
+
+loop();
+</script>
+</body>
+</html>

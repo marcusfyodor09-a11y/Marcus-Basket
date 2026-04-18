@@ -1,0 +1,2907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plague Alchemist</title>
+<style>
+/* ============================================================
+   SECTION 1: CSS Variables & Reset
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #F5E6C8;
+  --parchment-dark: #D4B896;
+  --wood-light: #8B6914;
+  --wood-mid: #6B4226;
+  --wood-dark: #3E2723;
+  --leather: #5C3A21;
+
+  --amber-warm: #FFB300;
+  --amber-glow: #FF8F00;
+  --toxic-green: #39FF14;
+  --toxic-dark: #1B5E20;
+  --plague-black: #1A1A0E;
+  --blood-red: #B71C1C;
+  --essence-purple: #9C27B0;
+
+  --health-full: #4CAF50;
+  --health-warn: #FFC107;
+  --health-danger: #FF5722;
+  --health-dead: #212121;
+
+  --panel-bg: rgba(62, 39, 35, 0.92);
+  --panel-border: #8D6E63;
+  --text-primary: #F5E6C8;
+  --text-gold: #FFD54F;
+  --text-dim: #8D6E63;
+  --text-toxic: #39FF14;
+
+  --corruption: 0;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: var(--text-primary);
+  background: #1a1008;
+}
+
+/* ============================================================
+   SECTION 2: Atmospheric & Texture Base
+   ============================================================ */
+#game-container {
+  width: 100%; height: 100%;
+  position: relative;
+  background:
+    repeating-linear-gradient(120deg, transparent 0px, transparent 2px, rgba(139,109,20,0.03) 2px, rgba(139,109,20,0.03) 3px),
+    radial-gradient(ellipse 40% 30% at 20% 70%, rgba(160,120,60,0.15) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 40% at 80% 30%, rgba(140,100,40,0.1) 0%, transparent 60%),
+    linear-gradient(to bottom, #2a1a0e 0%, #1a1008 50%, #0f0a04 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+#game-container::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: radial-gradient(ellipse 70% 70% at 50% 50%, transparent 30%, rgba(0,0,0,0.5) 100%);
+  mix-blend-mode: multiply;
+  animation: vignette-breathe 8s ease-in-out infinite;
+}
+
+@keyframes vignette-breathe {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.9; }
+}
+
+/* ============================================================
+   SECTION 3: Layout & Panel System
+   ============================================================ */
+#top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
+  background: linear-gradient(to bottom, rgba(62,39,35,0.95), rgba(42,26,14,0.95));
+  border-bottom: 2px solid var(--wood-mid);
+  box-shadow: 0 2px 15px rgba(0,0,0,0.5);
+  z-index: 100;
+  min-height: 52px;
+}
+
+.currency-group {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+
+.currency {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 16px;
+}
+
+.currency-label {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.gold-value {
+  color: var(--text-gold);
+  font-weight: bold;
+  font-size: 18px;
+  text-shadow: 0 0 4px rgba(255,213,79,0.6), 0 0 8px rgba(255,213,79,0.3), 0 0 16px rgba(255,213,79,0.15);
+  font-variant-numeric: tabular-nums;
+  transition: text-shadow 0.3s;
+}
+
+.gold-value.flash {
+  text-shadow: 0 0 4px rgba(255,213,79,0.6), 0 0 20px rgba(255,213,79,0.8), 0 0 40px rgba(255,213,79,0.4);
+}
+
+.gold-per-sec {
+  color: var(--amber-warm);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.essence-value {
+  color: #CE93D8;
+  font-weight: bold;
+  font-size: 18px;
+  text-shadow: 0 0 4px rgba(156,39,176,0.5), 0 0 10px rgba(156,39,176,0.25);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-tab {
+  padding: 6px 16px;
+  background: rgba(92,58,33,0.5);
+  border: 1px solid var(--wood-mid);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-dim);
+  font-family: Georgia, serif;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.nav-tab:hover {
+  background: rgba(92,58,33,0.8);
+  color: var(--text-primary);
+}
+
+.nav-tab.active {
+  background: var(--panel-bg);
+  color: var(--text-gold);
+  border-color: var(--amber-warm);
+  text-shadow: 0 0 8px rgba(255,213,79,0.4);
+}
+
+#main-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.view {
+  position: absolute;
+  inset: 0;
+  display: none !important;
+}
+
+.view.active {
+  display: flex !important;
+}
+
+#bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
+  background: linear-gradient(to top, rgba(62,39,35,0.95), rgba(42,26,14,0.95));
+  border-top: 2px solid var(--wood-mid);
+  box-shadow: 0 -2px 15px rgba(0,0,0,0.5);
+  z-index: 100;
+  min-height: 44px;
+  font-size: 13px;
+}
+
+.status-item {
+  color: var(--text-dim);
+}
+
+.status-item span {
+  color: var(--text-primary);
+}
+
+#prestige-btn {
+  padding: 6px 18px;
+  background: linear-gradient(135deg, #4A148C, #6A1B9A);
+  border: 1px solid #9C27B0;
+  border-radius: 4px;
+  color: #CE93D8;
+  font-family: Georgia, serif;
+  font-size: 13px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.3s;
+  box-shadow: 0 0 10px rgba(156,39,176,0.3);
+  display: none;
+}
+
+#prestige-btn:hover {
+  background: linear-gradient(135deg, #6A1B9A, #8E24AA);
+  box-shadow: 0 0 20px rgba(156,39,176,0.5), 0 0 40px rgba(156,39,176,0.2);
+  color: #E1BEE7;
+}
+
+#prestige-btn.available {
+  display: block;
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================
+   SECTION 4: Lab View Components
+   ============================================================ */
+#lab-view {
+  display: flex;
+}
+
+#generators-panel {
+  width: 260px;
+  background: linear-gradient(to right, rgba(42,26,14,0.9), rgba(42,26,14,0.7));
+  border-right: 2px solid var(--wood-mid);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-title {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-gold);
+  text-align: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--wood-mid);
+  text-shadow: 0 0 6px rgba(255,213,79,0.3);
+}
+
+.generator-card {
+  background: linear-gradient(135deg, rgba(92,58,33,0.6), rgba(62,39,35,0.8));
+  border: 1px solid var(--wood-mid);
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.generator-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,213,79,0.05), transparent);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.generator-card:hover::before {
+  opacity: 1;
+}
+
+.generator-card:hover {
+  border-color: var(--amber-warm);
+  box-shadow: 0 0 10px rgba(255,179,0,0.2);
+}
+
+.generator-card.locked {
+  opacity: 0.4;
+  cursor: default;
+  filter: grayscale(0.5);
+}
+
+.generator-card.locked:hover {
+  border-color: var(--wood-mid);
+  box-shadow: none;
+}
+
+.generator-card.cant-afford {
+  opacity: 0.7;
+}
+
+.gen-name {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.gen-count {
+  float: right;
+  color: var(--text-gold);
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.gen-cost {
+  font-size: 12px;
+  color: var(--amber-warm);
+}
+
+.gen-output {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.gen-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* Ingredients panel */
+#ingredients-panel {
+  padding: 10px 12px;
+  border-top: 1px solid var(--wood-mid);
+  margin-top: auto;
+}
+
+.ingredient-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 2px 0;
+  color: var(--text-dim);
+}
+
+.ingredient-row span:last-child {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lab Scene */
+#lab-scene {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(30,18,10,0.9) 0%, rgba(20,12,6,0.95) 100%);
+}
+
+/* Stone wall texture */
+#lab-scene::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent 0px, transparent 38px, rgba(100,70,40,0.08) 38px, rgba(100,70,40,0.08) 40px),
+    repeating-linear-gradient(90deg, transparent 0px, transparent 58px, rgba(100,70,40,0.05) 58px, rgba(100,70,40,0.05) 60px);
+  pointer-events: none;
+}
+
+#lab-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Shelves */
+.shelf {
+  position: absolute;
+  height: 8px;
+  background: linear-gradient(to bottom, #8B6914, #6B4226, #5C3A21);
+  box-shadow: 0 3px 6px rgba(0,0,0,0.5), 0 -1px 0 rgba(200,160,100,0.2);
+  z-index: 2;
+}
+
+.shelf-1 { top: 18%; left: 10%; right: 55%; }
+.shelf-2 { top: 18%; left: 55%; right: 10%; }
+.shelf-3 { top: 42%; left: 5%; right: 60%; }
+.shelf-4 { top: 42%; left: 50%; right: 5%; }
+
+/* Flasks on shelves */
+.flask {
+  position: absolute;
+  z-index: 3;
+  transition: transform 0.3s;
+}
+
+.flask:hover {
+  transform: scale(1.1);
+}
+
+.flask-neck {
+  width: 12px;
+  height: 14px;
+  background: rgba(200,200,220,0.12);
+  border: 1px solid rgba(200,200,220,0.2);
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  margin: 0 auto;
+}
+
+.flask-body {
+  width: 36px;
+  height: 44px;
+  background: rgba(200,200,220,0.08);
+  border: 1px solid rgba(200,200,220,0.18);
+  border-radius: 4px 4px 10px 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.flask-liquid {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: var(--fill, 60%);
+  background: linear-gradient(to top, hsl(var(--hue, 45), 80%, 30%), hsl(var(--hue, 45), 90%, 45%));
+  animation: liquid-wobble 3s ease-in-out infinite;
+  border-radius: 0 0 9px 9px;
+  box-shadow: inset 0 -4px 8px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.1);
+}
+
+.flask-bubble-el {
+  position: absolute;
+  bottom: 15%;
+  left: var(--x, 50%);
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  animation: bubble-rise 2.5s ease-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+.flask-drip-el {
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  width: 2px;
+  background: hsl(var(--hue, 45), 80%, 35%);
+  animation: drip 5s ease-in infinite;
+  animation-delay: var(--drip-delay, 0s);
+  border-radius: 0 0 50% 50%;
+}
+
+/* Cauldron */
+#cauldron {
+  position: absolute;
+  bottom: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+}
+
+.cauldron-body {
+  width: 120px;
+  height: 80px;
+  background: radial-gradient(ellipse at 30% 30%, #555, #2a2a2a 40%, #1a1a1a 80%);
+  border-radius: 10px 10px 50% 50%;
+  border: 2px solid #444;
+  position: relative;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.7), inset 0 -10px 20px rgba(0,0,0,0.5);
+}
+
+.cauldron-rim {
+  position: absolute;
+  top: -6px;
+  left: -4px;
+  right: -4px;
+  height: 12px;
+  background: linear-gradient(to bottom, #666, #444, #333);
+  border-radius: 6px 6px 0 0;
+  border: 1px solid #555;
+}
+
+.cauldron-liquid {
+  position: absolute;
+  top: 10px;
+  left: 8px;
+  right: 8px;
+  bottom: 15px;
+  background: radial-gradient(ellipse at 50% 30%, hsl(var(--cauldron-hue, 45), 70%, 40%), hsl(var(--cauldron-hue, 45), 60%, 20%));
+  border-radius: 0 0 50% 50%;
+  animation: liquid-wobble 2s ease-in-out infinite;
+  box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+.cauldron-liquid::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.15), transparent);
+  animation: surface-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes surface-shimmer {
+  0%, 100% { transform: translateX(-20%); }
+  50% { transform: translateX(20%); }
+}
+
+.cauldron-leg {
+  position: absolute;
+  bottom: -12px;
+  width: 8px;
+  height: 14px;
+  background: #333;
+  border-radius: 0 0 3px 3px;
+}
+
+.cauldron-leg:first-of-type { left: 15px; transform: rotate(-5deg); }
+.cauldron-leg:nth-of-type(2) { left: 50%; transform: translateX(-50%); }
+.cauldron-leg:last-of-type { right: 15px; transform: rotate(5deg); }
+
+/* Fire under cauldron */
+.cauldron-fire {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+}
+
+.fire-tongue {
+  width: 8px;
+  height: 20px;
+  background: radial-gradient(ellipse at 50% 100%, #FF6F00, #FF8F00 30%, #FFB300 60%, transparent 100%);
+  border-radius: 50% 50% 20% 20%;
+  animation: fire-dance 0.3s ease-in-out infinite alternate;
+  box-shadow: 0 0 6px rgba(255,143,0,0.6);
+}
+
+.fire-tongue:nth-child(2) { height: 26px; animation-delay: 0.05s; }
+.fire-tongue:nth-child(3) { height: 18px; animation-delay: 0.1s; }
+.fire-tongue:nth-child(4) { height: 24px; animation-delay: 0.15s; }
+.fire-tongue:nth-child(5) { height: 16px; animation-delay: 0.08s; }
+
+@keyframes fire-dance {
+  0% { transform: scaleX(1) scaleY(1); opacity: 0.9; }
+  100% { transform: scaleX(0.85) scaleY(1.15); opacity: 1; }
+}
+
+/* Candles */
+.candle {
+  position: absolute;
+  z-index: 3;
+}
+
+.candle-stick {
+  width: 8px;
+  height: 30px;
+  background: linear-gradient(to right, #E8D5A3, #F5E6C8, #E8D5A3);
+  border-radius: 2px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.candle-wick {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 5px;
+  background: #333;
+}
+
+.candle-flame {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 14px;
+  background: radial-gradient(ellipse at 50% 80%, #FFE082, #FF8F00 40%, #E65100 70%, transparent 100%);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  animation: candle-flicker 0.15s ease-in-out infinite alternate;
+  box-shadow:
+    0 0 8px 4px rgba(255,224,130,0.35),
+    0 0 20px 10px rgba(255,143,0,0.15),
+    0 0 60px 30px rgba(255,143,0,0.06);
+}
+
+.candle-holder {
+  width: 18px;
+  height: 6px;
+  background: linear-gradient(to bottom, #8B6914, #5C3A21);
+  border-radius: 2px;
+  margin: 0 auto;
+}
+
+/* Crafting Panel */
+#crafting-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(42,26,14,0.98), rgba(42,26,14,0.9));
+  border-top: 2px solid var(--wood-mid);
+  padding: 14px 20px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.craft-slot {
+  width: 56px;
+  height: 56px;
+  background: rgba(0,0,0,0.4);
+  border: 2px solid var(--wood-mid);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.craft-slot:hover {
+  border-color: var(--amber-warm);
+  box-shadow: 0 0 8px rgba(255,179,0,0.3);
+}
+
+.craft-slot.filled {
+  border-color: var(--amber-warm);
+  color: var(--text-primary);
+  background: rgba(255,179,0,0.1);
+}
+
+.craft-plus {
+  color: var(--text-dim);
+  font-size: 20px;
+}
+
+#brew-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #E65100, #FF6F00);
+  border: 2px solid #FF8F00;
+  border-radius: 6px;
+  color: #FFF;
+  font-family: Georgia, serif;
+  font-size: 14px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  transition: all 0.3s;
+  box-shadow: 0 0 10px rgba(255,111,0,0.3);
+  margin-left: 10px;
+}
+
+#brew-btn:hover {
+  background: linear-gradient(135deg, #FF6F00, #FF8F00);
+  box-shadow: 0 0 20px rgba(255,111,0,0.5), 0 0 40px rgba(255,111,0,0.2);
+}
+
+#brew-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
+
+#brew-result {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  white-space: nowrap;
+  z-index: 20;
+}
+
+#brew-result.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+#brew-result.success {
+  background: rgba(76,175,80,0.9);
+  border: 1px solid #66BB6A;
+  color: #fff;
+}
+
+#brew-result.fail {
+  background: rgba(183,28,28,0.9);
+  border: 1px solid #EF5350;
+  color: #fff;
+}
+
+/* Ingredient selector dropdown */
+#ingredient-selector {
+  position: fixed;
+  background: var(--panel-bg);
+  border: 2px solid var(--wood-mid);
+  border-radius: 6px;
+  padding: 6px 0;
+  z-index: 1000;
+  display: none;
+  min-width: 140px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+}
+
+.ingredient-option {
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ingredient-option:hover {
+  background: rgba(255,179,0,0.15);
+}
+
+.ingredient-option .count {
+  color: var(--text-gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.ingredient-option.disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ============================================================
+   SECTION 5: Map View Components
+   ============================================================ */
+#map-view {
+  position: relative;
+  background: #1a1008;
+}
+
+#map-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+#village-popup {
+  position: absolute;
+  background: var(--panel-bg);
+  border: 2px solid var(--wood-mid);
+  border-radius: 8px;
+  padding: 14px;
+  min-width: 200px;
+  display: none;
+  z-index: 50;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+}
+
+.popup-title {
+  font-size: 16px;
+  color: var(--text-gold);
+  margin-bottom: 8px;
+  text-shadow: 0 0 6px rgba(255,213,79,0.3);
+}
+
+.popup-stat {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.popup-stat span {
+  color: var(--text-primary);
+}
+
+.popup-health-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(0,0,0,0.5);
+  border-radius: 4px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.popup-health-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s, background 0.5s;
+}
+
+.popup-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.popup-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: Georgia, serif;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+}
+
+.popup-btn.plague {
+  background: rgba(183,28,28,0.6);
+  border-color: #EF5350;
+  color: #FFCDD2;
+}
+
+.popup-btn.plague:hover {
+  background: rgba(183,28,28,0.9);
+}
+
+.popup-btn.cure {
+  background: rgba(46,125,50,0.6);
+  border-color: #66BB6A;
+  color: #C8E6C9;
+}
+
+.popup-btn.cure:hover {
+  background: rgba(46,125,50,0.9);
+}
+
+.popup-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.popup-close {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.popup-close:hover {
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   SECTION 6: Recipe Book UI
+   ============================================================ */
+#recipe-view {
+  display: flex;
+}
+
+#recipe-list-panel {
+  width: 280px;
+  background: linear-gradient(to right, rgba(42,26,14,0.9), rgba(42,26,14,0.7));
+  border-right: 2px solid var(--wood-mid);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recipe-entry {
+  background: rgba(92,58,33,0.4);
+  border: 1px solid var(--wood-mid);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.recipe-entry:hover {
+  border-color: var(--amber-warm);
+  background: rgba(92,58,33,0.6);
+}
+
+.recipe-entry.active {
+  border-color: var(--text-gold);
+  background: rgba(255,213,79,0.1);
+}
+
+.recipe-entry.undiscovered {
+  opacity: 0.4;
+  font-style: italic;
+}
+
+.recipe-name {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.recipe-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+.recipe-type.cure { color: var(--health-full); }
+.recipe-type.plague { color: var(--health-danger); }
+.recipe-type.special { color: #CE93D8; }
+
+#recipe-detail-panel {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background:
+    radial-gradient(ellipse 50% 40% at 50% 30%, rgba(100,70,40,0.08) 0%, transparent 70%),
+    linear-gradient(to bottom, rgba(20,12,6,0.9) 0%, rgba(15,10,4,0.95) 100%);
+}
+
+.detail-title {
+  font-size: 22px;
+  color: var(--text-gold);
+  text-shadow: 0 0 8px rgba(255,213,79,0.3);
+}
+
+.detail-type {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.detail-desc {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.detail-ingredients {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.detail-ingredient {
+  padding: 4px 12px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--wood-mid);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.detail-effect {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.detail-profit {
+  font-size: 13px;
+  color: var(--text-gold);
+}
+
+#recipe-empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 16px;
+}
+
+/* ============================================================
+   SECTION 7: Keyframe Animations
+   ============================================================ */
+@keyframes bubble-rise {
+  0%   { transform: translateY(0) scale(1); opacity: 0.7; }
+  50%  { transform: translateY(-18px) scale(1.2); opacity: 0.5; }
+  100% { transform: translateY(-36px) scale(0.5); opacity: 0; }
+}
+
+@keyframes liquid-wobble {
+  0%, 100% { border-radius: 50% 50% 45% 55% / 50% 55% 45% 50%; }
+  25%      { border-radius: 55% 45% 50% 50% / 45% 50% 55% 50%; }
+  50%      { border-radius: 45% 55% 55% 45% / 55% 45% 50% 50%; }
+  75%      { border-radius: 50% 50% 45% 55% / 50% 50% 45% 55%; }
+}
+
+@keyframes candle-flicker {
+  0%   { opacity: 0.8; transform: translateX(-50%) scaleY(1) scaleX(1); }
+  100% { opacity: 1;   transform: translateX(-50%) scaleY(1.12) scaleX(0.92); }
+}
+
+@keyframes drip {
+  0%   { height: 0; opacity: 1; }
+  15%  { height: 10px; opacity: 1; }
+  20%  { height: 10px; opacity: 1; border-radius: 0 0 50% 50%; }
+  22%  { height: 0; opacity: 0; }
+  100% { height: 0; opacity: 0; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { filter: brightness(1); box-shadow: 0 0 10px rgba(156,39,176,0.3); }
+  50%      { filter: brightness(1.2); box-shadow: 0 0 20px rgba(156,39,176,0.5), 0 0 40px rgba(156,39,176,0.2); }
+}
+
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0); }
+  10% { transform: translate(-6px, 3px); }
+  20% { transform: translate(5px, -5px); }
+  30% { transform: translate(-3px, 6px); }
+  40% { transform: translate(6px, -2px); }
+  50% { transform: translate(-5px, -3px); }
+  60% { transform: translate(3px, 5px); }
+  70% { transform: translate(-2px, -6px); }
+  80% { transform: translate(5px, 2px); }
+  90% { transform: translate(-3px, 3px); }
+}
+
+.screen-shake {
+  animation: screen-shake 0.6s ease-out;
+}
+
+@keyframes float-up {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-40px); opacity: 0; }
+}
+
+.float-text {
+  position: absolute;
+  pointer-events: none;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 100;
+  animation: float-up 1s ease-out forwards;
+}
+
+/* ============================================================
+   SECTION 8: Prestige Overlay
+   ============================================================ */
+#prestige-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.5s ease-in;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#prestige-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+  background: radial-gradient(circle at 50% 80%, rgba(57,255,20,0.15), rgba(0,0,0,0.95) 70%);
+}
+
+#prestige-overlay canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.prestige-text {
+  position: relative;
+  z-index: 2;
+  font-size: 36px;
+  color: var(--toxic-green);
+  text-shadow: 0 0 10px rgba(57,255,20,0.8), 0 0 30px rgba(57,255,20,0.4), 0 0 60px rgba(57,255,20,0.2);
+  text-transform: uppercase;
+  letter-spacing: 6px;
+  opacity: 0;
+  transition: opacity 1s ease-in 1s;
+}
+
+#prestige-overlay.active .prestige-text {
+  opacity: 1;
+}
+
+.prestige-sub {
+  position: relative;
+  z-index: 2;
+  font-size: 16px;
+  color: #CE93D8;
+  text-shadow: 0 0 8px rgba(156,39,176,0.6);
+  opacity: 0;
+  transition: opacity 1s ease-in 2s;
+}
+
+#prestige-overlay.active .prestige-sub {
+  opacity: 1;
+}
+
+#prestige-continue {
+  position: relative;
+  z-index: 2;
+  padding: 10px 30px;
+  background: rgba(156,39,176,0.3);
+  border: 1px solid #9C27B0;
+  border-radius: 6px;
+  color: #CE93D8;
+  font-family: Georgia, serif;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 1s ease-in 3s, background 0.3s;
+}
+
+#prestige-overlay.active #prestige-continue {
+  opacity: 1;
+}
+
+#prestige-continue:hover {
+  background: rgba(156,39,176,0.6);
+}
+
+/* ============================================================
+   SECTION 9: Tooltip
+   ============================================================ */
+#tooltip {
+  position: fixed;
+  background: rgba(30,18,10,0.95);
+  border: 1px solid var(--wood-mid);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  z-index: 5000;
+  pointer-events: none;
+  display: none;
+  max-width: 220px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.7);
+  line-height: 1.4;
+}
+
+/* ============================================================
+   SECTION 10: Scrollbar Styling
+   ============================================================ */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+::-webkit-scrollbar-thumb { background: var(--wood-mid); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--wood-light); }
+
+/* ============================================================
+   SECTION 11: Log/Notification
+   ============================================================ */
+#log {
+  position: fixed;
+  bottom: 60px;
+  right: 20px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.log-entry {
+  padding: 6px 12px;
+  background: rgba(30,18,10,0.9);
+  border: 1px solid var(--wood-mid);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  animation: float-up 3s ease-out forwards;
+  white-space: nowrap;
+}
+
+.log-entry.gold { color: var(--text-gold); border-color: rgba(255,213,79,0.4); }
+.log-entry.plague { color: #EF5350; border-color: rgba(239,83,80,0.4); }
+.log-entry.cure { color: #66BB6A; border-color: rgba(102,187,106,0.4); }
+.log-entry.discovery { color: #CE93D8; border-color: rgba(206,147,216,0.4); }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <!-- TOP BAR -->
+  <div id="top-bar">
+    <div class="currency-group">
+      <div class="currency">
+        <span class="currency-label">Gold</span>
+        <span class="gold-value" id="gold-display">0</span>
+        <span class="gold-per-sec" id="gps-display">(+0/s)</span>
+      </div>
+      <div class="currency">
+        <span class="currency-label">Essence</span>
+        <span class="essence-value" id="essence-display">0</span>
+      </div>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-tab active" data-view="lab">Laboratory</div>
+      <div class="nav-tab" data-view="map">Kingdom Map</div>
+      <div class="nav-tab" data-view="recipe">Recipe Book</div>
+    </div>
+  </div>
+
+  <!-- MAIN AREA -->
+  <div id="main-area">
+    <!-- LAB VIEW -->
+    <div id="lab-view" class="view active" data-name="lab">
+      <div id="generators-panel">
+        <div class="panel-title">Apparatus</div>
+        <div id="generators-list"></div>
+        <div id="ingredients-panel">
+          <div class="panel-title" style="font-size:12px; margin-bottom:6px;">Ingredients</div>
+          <div id="ingredients-list"></div>
+        </div>
+      </div>
+      <div id="lab-scene">
+        <canvas id="lab-canvas"></canvas>
+
+        <!-- Shelves -->
+        <div class="shelf shelf-1"></div>
+        <div class="shelf shelf-2"></div>
+        <div class="shelf shelf-3"></div>
+        <div class="shelf shelf-4"></div>
+
+        <!-- Flasks will be added by JS -->
+        <div id="flasks-container"></div>
+
+        <!-- Candles -->
+        <div class="candle" style="left: 6%; top: 8%;">
+          <div class="candle-flame"></div>
+          <div class="candle-wick"></div>
+          <div class="candle-stick"></div>
+          <div class="candle-holder"></div>
+        </div>
+        <div class="candle" style="right: 8%; top: 8%;">
+          <div class="candle-flame"></div>
+          <div class="candle-wick"></div>
+          <div class="candle-stick"></div>
+          <div class="candle-holder"></div>
+        </div>
+        <div class="candle" style="left: 40%; top: 32%;">
+          <div class="candle-flame"></div>
+          <div class="candle-wick"></div>
+          <div class="candle-stick"></div>
+          <div class="candle-holder"></div>
+        </div>
+        <div class="candle" style="right: 4%; top: 55%;">
+          <div class="candle-flame"></div>
+          <div class="candle-wick"></div>
+          <div class="candle-stick"></div>
+          <div class="candle-holder"></div>
+        </div>
+
+        <!-- Cauldron -->
+        <div id="cauldron">
+          <div class="cauldron-rim"></div>
+          <div class="cauldron-body">
+            <div class="cauldron-liquid"></div>
+          </div>
+          <div class="cauldron-fire">
+            <div class="fire-tongue"></div>
+            <div class="fire-tongue"></div>
+            <div class="fire-tongue"></div>
+            <div class="fire-tongue"></div>
+            <div class="fire-tongue"></div>
+          </div>
+          <div class="cauldron-leg"></div>
+          <div class="cauldron-leg"></div>
+          <div class="cauldron-leg"></div>
+        </div>
+
+        <!-- Crafting Panel -->
+        <div id="crafting-panel">
+          <div class="craft-slot" data-slot="0">Empty</div>
+          <span class="craft-plus">+</span>
+          <div class="craft-slot" data-slot="1">Empty</div>
+          <span class="craft-plus">+</span>
+          <div class="craft-slot" data-slot="2">Empty</div>
+          <span class="craft-plus">=</span>
+          <button id="brew-btn" disabled>Brew</button>
+          <div id="brew-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP VIEW -->
+    <div id="map-view" class="view" data-name="map">
+      <canvas id="map-canvas"></canvas>
+      <div id="village-popup">
+        <span class="popup-close" id="popup-close">&times;</span>
+        <div class="popup-title" id="popup-title"></div>
+        <div class="popup-stat">Population: <span id="popup-pop"></span></div>
+        <div class="popup-stat">Health: <span id="popup-health-text"></span></div>
+        <div class="popup-health-bar"><div class="popup-health-fill" id="popup-health-fill"></div></div>
+        <div class="popup-stat">Cure Demand: <span id="popup-demand"></span></div>
+        <div class="popup-stat" id="popup-plague-status"></div>
+        <div class="popup-actions" id="popup-actions"></div>
+      </div>
+    </div>
+
+    <!-- RECIPE VIEW -->
+    <div id="recipe-view" class="view" data-name="recipe">
+      <div id="recipe-list-panel">
+        <div class="panel-title">Recipes</div>
+        <div id="recipe-list"></div>
+      </div>
+      <div id="recipe-detail-panel">
+        <div id="recipe-empty-state">Select a recipe to view details</div>
+        <div id="recipe-detail" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div id="bottom-bar">
+    <div style="display:flex; gap:20px;">
+      <div class="status-item">Active Plagues: <span id="plague-count">0</span></div>
+      <div class="status-item">Villages Infected: <span id="infected-count">0/0</span></div>
+      <div class="status-item">Recipes Found: <span id="recipe-count">0/8</span></div>
+    </div>
+    <button id="prestige-btn">Unleash Pandemic</button>
+  </div>
+</div>
+
+<!-- Ingredient Selector Dropdown -->
+<div id="ingredient-selector"></div>
+
+<!-- Notification Log -->
+<div id="log"></div>
+
+<!-- Tooltip -->
+<div id="tooltip"></div>
+
+<!-- Prestige Overlay -->
+<div id="prestige-overlay">
+  <canvas id="prestige-canvas"></canvas>
+  <div class="prestige-text">THE KINGDOM FALLS</div>
+  <div class="prestige-sub" id="prestige-reward-text">+0 Essence earned</div>
+  <button id="prestige-continue">A New Kingdom Awaits</button>
+</div>
+
+<script>
+// ============================================================
+// SECTION 12: Game Config & Constants
+// ============================================================
+const CONFIG = {
+  TICK_MS: 100,
+  SAVE_INTERVAL: 30000,
+  PARTICLE_CAP: 200,
+  VILLAGE_COUNT: 8,
+};
+
+const GENERATORS = [
+  { id: 'herbGarden', name: 'Herb Garden', baseCost: 10, costScale: 1.15, baseGold: 1, ingredient: 'herbs', ingredientRate: 0.3, desc: 'A patch of medicinal herbs. Produces gold and herbs.', unlockAt: 0 },
+  { id: 'ratFarm', name: 'Rat Farm', baseCost: 100, costScale: 1.18, baseGold: 5, ingredient: 'ratBlood', ingredientRate: 0.2, desc: 'Caged rodents bred for their blood. Vile but lucrative.', unlockAt: 50 },
+  { id: 'distillery', name: 'Distillery', baseCost: 500, costScale: 1.20, baseGold: 22, ingredient: 'mushrooms', ingredientRate: 0.15, secondIngredient: 'nightshade', secondRate: 0.1, desc: 'Extracts potent essences from fungi and nightshade.', unlockAt: 400 },
+  { id: 'plagueCarrier', name: 'Plague Carrier', baseCost: 2000, costScale: 1.22, baseGold: 0, ingredient: null, ingredientRate: 0, desc: 'Spreads your plagues to neighboring villages automatically.', unlockAt: 1500, special: 'autoSpread' },
+];
+
+const INGREDIENTS = [
+  { id: 'herbs', name: 'Herbs', color: '#66BB6A' },
+  { id: 'ratBlood', name: 'Rat Blood', color: '#EF5350' },
+  { id: 'mushrooms', name: 'Mushrooms', color: '#AB47BC' },
+  { id: 'nightshade', name: 'Nightshade', color: '#7E57C2' },
+  { id: 'mercury', name: 'Mercury', color: '#B0BEC5' },
+  { id: 'sulfur', name: 'Sulfur', color: '#FDD835' },
+];
+
+const RECIPES = [
+  { id: 'minorTonic', name: 'Minor Tonic', ingredients: ['herbs', 'herbs'], type: 'cure', healAmount: 15, basePrice: 20, desc: 'A simple herbal remedy. Restores a modest amount of health to a village.' },
+  { id: 'healingSalve', name: 'Healing Salve', ingredients: ['herbs', 'mushrooms'], type: 'cure', healAmount: 30, basePrice: 50, desc: 'A potent fungal paste. Significantly restores village health.' },
+  { id: 'panacea', name: 'Panacea', ingredients: ['herbs', 'nightshade', 'mushrooms'], type: 'cure', healAmount: 80, basePrice: 200, desc: 'The ultimate remedy. Cures nearly any ailment. Demand skyrockets during epidemics.' },
+  { id: 'ratFever', name: 'Rat Fever', ingredients: ['ratBlood', 'mushrooms'], type: 'plague', damage: 3, spreadRate: 0.4, desc: 'A mild but persistent illness carried by vermin. Slow to kill, hard to stop.' },
+  { id: 'blackBile', name: 'Black Bile', ingredients: ['ratBlood', 'nightshade'], type: 'plague', damage: 6, spreadRate: 0.25, desc: 'A festering corruption of the humours. Lethal if left untreated.' },
+  { id: 'theWithering', name: 'The Withering', ingredients: ['ratBlood', 'sulfur', 'mercury'], type: 'plague', damage: 12, spreadRate: 0.15, desc: 'An apocalyptic plague that dissolves flesh from bone. Kingdoms fall before it.' },
+  { id: 'essenceExtract', name: 'Essence Extract', ingredients: ['nightshade', 'mercury'], type: 'special', essenceGain: 1, basePrice: 0, desc: 'A shimmering violet distillation. Grants a small amount of pure Essence.' },
+  { id: 'antidoteUniversal', name: 'Antidote Universal', ingredients: ['sulfur', 'herbs', 'ratBlood'], type: 'cure', healAmount: 100, basePrice: 350, desc: 'The legendary cure-all. Purges any plague instantly and fully restores health.' },
+];
+
+const VILLAGE_PREFIXES = ['Elm', 'Ash', 'Raven', 'Iron', 'Willow', 'Stone', 'Thorn', 'Moss', 'Shadow', 'Golden'];
+const VILLAGE_SUFFIXES = ['hollow', 'stead', 'wick', 'ford', 'haven', 'mire', 'reach', 'vale', 'wood', 'gate'];
+
+// ============================================================
+// SECTION 13: Game State
+// ============================================================
+let state = createDefaultState();
+
+function createDefaultState() {
+  return {
+    gold: 0,
+    essence: 0,
+    totalGoldEarned: 0,
+    generators: {},
+    ingredients: { herbs: 0, ratBlood: 0, mushrooms: 0, nightshade: 0, mercury: 0, sulfur: 0 },
+    discoveredRecipes: [],
+    villages: [],
+    activePlagues: [],
+    craftSlots: [null, null, null],
+    totalPandemics: 0,
+    essenceMultiplier: 1,
+    corruptionLevel: 0,
+    totalTimePlayed: 0,
+    selectedRecipe: null,
+    currentView: 'lab',
+    selectedVillage: null,
+  };
+}
+
+// ============================================================
+// SECTION 14: Save/Load
+// ============================================================
+function saveGame() {
+  try {
+    localStorage.setItem('plagueAlchemist', JSON.stringify(state));
+  } catch(e) {}
+}
+
+function loadGame() {
+  try {
+    const saved = localStorage.getItem('plagueAlchemist');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Merge with defaults
+      const def = createDefaultState();
+      state = { ...def, ...parsed };
+      state.ingredients = { ...def.ingredients, ...parsed.ingredients };
+      state.generators = { ...def.generators, ...parsed.generators };
+      // Rebuild villages if empty
+      if (!state.villages || state.villages.length === 0) {
+        generateVillages();
+      }
+    } else {
+      generateVillages();
+    }
+  } catch(e) {
+    generateVillages();
+  }
+}
+
+// ============================================================
+// SECTION 15: Village Generation
+// ============================================================
+function generateVillages() {
+  state.villages = [];
+  const used = new Set();
+  const positions = [
+    { x: 0.2, y: 0.25 }, { x: 0.5, y: 0.15 }, { x: 0.8, y: 0.22 },
+    { x: 0.15, y: 0.55 }, { x: 0.45, y: 0.5 }, { x: 0.75, y: 0.55 },
+    { x: 0.3, y: 0.8 }, { x: 0.65, y: 0.78 }
+  ];
+
+  for (let i = 0; i < CONFIG.VILLAGE_COUNT; i++) {
+    let name;
+    do {
+      const pre = VILLAGE_PREFIXES[Math.floor(Math.random() * VILLAGE_PREFIXES.length)];
+      const suf = VILLAGE_SUFFIXES[Math.floor(Math.random() * VILLAGE_SUFFIXES.length)];
+      name = pre + suf;
+    } while (used.has(name));
+    used.add(name);
+
+    state.villages.push({
+      id: i,
+      name: name,
+      x: positions[i].x + (Math.random() - 0.5) * 0.08,
+      y: positions[i].y + (Math.random() - 0.5) * 0.08,
+      population: 50 + Math.floor(Math.random() * 150),
+      health: 100,
+      infected: false,
+      plagueId: null,
+      demandMultiplier: 1,
+    });
+  }
+
+  // Create connections (adjacency)
+  state.villageConnections = [];
+  for (let i = 0; i < state.villages.length; i++) {
+    for (let j = i + 1; j < state.villages.length; j++) {
+      const dx = state.villages[i].x - state.villages[j].x;
+      const dy = state.villages[i].y - state.villages[j].y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 0.38) {
+        state.villageConnections.push([i, j]);
+      }
+    }
+  }
+}
+
+// ============================================================
+// SECTION 16: Economy & Generator Logic
+// ============================================================
+function getGeneratorCost(genDef, count) {
+  return Math.floor(genDef.baseCost * Math.pow(genDef.costScale, count || 0));
+}
+
+function getGenCount(id) {
+  return state.generators[id] || 0;
+}
+
+function buyGenerator(id) {
+  const def = GENERATORS.find(g => g.id === id);
+  if (!def) return;
+  const count = getGenCount(id);
+  const cost = getGeneratorCost(def, count);
+  if (state.gold >= cost) {
+    state.gold -= cost;
+    state.generators[id] = count + 1;
+    playSound('buy');
+    updateFlasks();
+  }
+}
+
+function calcGoldPerSec() {
+  let gps = 0;
+  for (const def of GENERATORS) {
+    gps += def.baseGold * getGenCount(def.id);
+  }
+  return gps * state.essenceMultiplier;
+}
+
+function updateGenerators(dt) {
+  for (const def of GENERATORS) {
+    const count = getGenCount(def.id);
+    if (count <= 0) continue;
+
+    // Gold production
+    const goldGain = def.baseGold * count * state.essenceMultiplier * dt;
+    state.gold += goldGain;
+    state.totalGoldEarned += goldGain;
+
+    // Ingredient production
+    if (def.ingredient) {
+      state.ingredients[def.ingredient] += def.ingredientRate * count * dt;
+    }
+    if (def.secondIngredient) {
+      state.ingredients[def.secondIngredient] += def.secondRate * count * dt;
+    }
+  }
+
+  // Mercury and Sulfur: slowly produced by distillery as bonus
+  const distCount = getGenCount('distillery');
+  if (distCount > 0) {
+    state.ingredients.mercury += 0.03 * distCount * dt;
+    state.ingredients.sulfur += 0.04 * distCount * dt;
+  }
+}
+
+// ============================================================
+// SECTION 17: Recipe & Crafting
+// ============================================================
+function setSlot(slotIdx, ingredientId) {
+  state.craftSlots[slotIdx] = ingredientId;
+  updateCraftingUI();
+}
+
+function clearSlot(slotIdx) {
+  state.craftSlots[slotIdx] = null;
+  updateCraftingUI();
+}
+
+function canBrew() {
+  const filled = state.craftSlots.filter(s => s !== null);
+  if (filled.length < 2) return false;
+  // Check ingredient availability
+  const needed = {};
+  for (const s of state.craftSlots) {
+    if (s) needed[s] = (needed[s] || 0) + 1;
+  }
+  for (const [ing, count] of Object.entries(needed)) {
+    if (Math.floor(state.ingredients[ing]) < count) return false;
+  }
+  return true;
+}
+
+function brew() {
+  if (!canBrew()) return;
+
+  const filled = state.craftSlots.filter(s => s !== null).sort();
+
+  // Consume ingredients
+  const needed = {};
+  for (const s of state.craftSlots) {
+    if (s) needed[s] = (needed[s] || 0) + 1;
+  }
+  for (const [ing, count] of Object.entries(needed)) {
+    state.ingredients[ing] -= count;
+  }
+
+  // Check against recipes
+  const recipe = RECIPES.find(r => {
+    const sorted = [...r.ingredients].sort();
+    if (sorted.length !== filled.length) return false;
+    return sorted.every((v, i) => v === filled[i]);
+  });
+
+  if (recipe) {
+    const isNew = !state.discoveredRecipes.includes(recipe.id);
+    if (isNew) {
+      state.discoveredRecipes.push(recipe.id);
+      showBrewResult(true, 'Discovered: ' + recipe.name + '!');
+      addLog(recipe.name + ' discovered!', 'discovery');
+      playSound('discover');
+    } else {
+      // Apply effect immediately
+      applyRecipe(recipe);
+      showBrewResult(true, recipe.name + ' brewed!');
+      playSound('brew');
+    }
+    updateRecipeList();
+  } else {
+    // Generate hint
+    const hint = generateHint(filled);
+    showBrewResult(false, hint);
+    playSound('fail');
+  }
+
+  // Clear slots
+  state.craftSlots = [null, null, null];
+  updateCraftingUI();
+}
+
+function applyRecipe(recipe) {
+  if (recipe.type === 'cure') {
+    // Store in inventory for map use
+    if (!state.cureInventory) state.cureInventory = {};
+    state.cureInventory[recipe.id] = (state.cureInventory[recipe.id] || 0) + 1;
+    addLog(recipe.name + ' added to inventory', 'cure');
+  } else if (recipe.type === 'plague') {
+    if (!state.plagueInventory) state.plagueInventory = {};
+    state.plagueInventory[recipe.id] = (state.plagueInventory[recipe.id] || 0) + 1;
+    addLog(recipe.name + ' vial prepared', 'plague');
+  } else if (recipe.type === 'special') {
+    if (recipe.essenceGain) {
+      state.essence += recipe.essenceGain;
+      addLog('+' + recipe.essenceGain + ' Essence extracted', 'discovery');
+    }
+  }
+}
+
+function generateHint(attempted) {
+  // Find closest matching recipe
+  let bestMatch = null;
+  let bestScore = -1;
+  for (const r of RECIPES) {
+    const sorted = [...r.ingredients].sort();
+    let score = 0;
+    for (const a of attempted) {
+      if (sorted.includes(a)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = r;
+    }
+  }
+  if (bestScore >= 1 && bestMatch) {
+    const missing = bestMatch.ingredients.find(i => !attempted.includes(i));
+    if (missing) {
+      const ingDef = INGREDIENTS.find(ig => ig.id === missing);
+      return 'The mixture reacts... it craves something ' + getIngredientHint(missing);
+    }
+  }
+  return 'The ingredients refuse to combine. A foul waste.';
+}
+
+function getIngredientHint(id) {
+  const hints = {
+    herbs: 'green and alive',
+    ratBlood: 'warm and crimson',
+    mushrooms: 'fungal and damp',
+    nightshade: 'dark and poisonous',
+    mercury: 'cold and silvery',
+    sulfur: 'yellow and acrid',
+  };
+  return hints[id] || 'unknown';
+}
+
+function showBrewResult(success, text) {
+  const el = document.getElementById('brew-result');
+  el.textContent = text;
+  el.className = 'show ' + (success ? 'success' : 'fail');
+  setTimeout(() => { el.className = ''; }, 2500);
+}
+
+// ============================================================
+// SECTION 18: Village & Plague System
+// ============================================================
+function updateVillages(dt) {
+  let infectedCount = 0;
+  const plagueCarriers = getGenCount('plagueCarrier');
+
+  for (const v of state.villages) {
+    if (v.infected && v.plagueId) {
+      const recipe = RECIPES.find(r => r.id === v.plagueId);
+      if (recipe) {
+        v.health -= recipe.damage * dt;
+        if (v.health <= 0) {
+          v.health = 0;
+          // Village is dead — stops producing demand but stays on map
+        }
+      }
+      infectedCount++;
+    }
+
+    // Update demand multiplier
+    v.demandMultiplier = 1 + (100 - v.health) / 20;
+  }
+
+  // Auto-spread from plague carriers
+  if (plagueCarriers > 0) {
+    for (const v of state.villages) {
+      if (v.infected && v.health < 50 && v.plagueId) {
+        // Spread to neighbors
+        for (const conn of (state.villageConnections || [])) {
+          let neighborIdx = -1;
+          if (conn[0] === v.id) neighborIdx = conn[1];
+          else if (conn[1] === v.id) neighborIdx = conn[0];
+          if (neighborIdx >= 0) {
+            const neighbor = state.villages[neighborIdx];
+            if (!neighbor.infected && neighbor.health > 0) {
+              const recipe = RECIPES.find(r => r.id === v.plagueId);
+              if (recipe && Math.random() < recipe.spreadRate * plagueCarriers * 0.1 * dt) {
+                neighbor.infected = true;
+                neighbor.plagueId = v.plagueId;
+                addLog(neighbor.name + ' infected with ' + recipe.name, 'plague');
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Update corruption level
+  const totalHealth = state.villages.reduce((s, v) => s + v.health, 0);
+  const maxHealth = state.villages.length * 100;
+  state.corruptionLevel = 1 - (totalHealth / maxHealth);
+
+  return infectedCount;
+}
+
+function deployPlague(villageId, plagueId) {
+  const village = state.villages.find(v => v.id === villageId);
+  if (!village || village.infected || village.health <= 0) return;
+  if (!state.plagueInventory || !state.plagueInventory[plagueId] || state.plagueInventory[plagueId] <= 0) return;
+
+  state.plagueInventory[plagueId]--;
+  village.infected = true;
+  village.plagueId = plagueId;
+
+  const recipe = RECIPES.find(r => r.id === plagueId);
+  addLog(recipe.name + ' deployed to ' + village.name, 'plague');
+  playSound('plague');
+}
+
+function sellCure(villageId, cureId) {
+  const village = state.villages.find(v => v.id === villageId);
+  if (!village || village.health >= 100) return;
+  if (!state.cureInventory || !state.cureInventory[cureId] || state.cureInventory[cureId] <= 0) return;
+
+  const recipe = RECIPES.find(r => r.id === cureId);
+  if (!recipe) return;
+
+  state.cureInventory[cureId]--;
+  const healAmt = Math.min(recipe.healAmount, 100 - village.health);
+  village.health += healAmt;
+
+  if (village.health >= 100) {
+    village.infected = false;
+    village.plagueId = null;
+  }
+
+  const price = Math.floor(recipe.basePrice * village.demandMultiplier);
+  state.gold += price;
+  state.totalGoldEarned += price;
+
+  addLog('Sold ' + recipe.name + ' to ' + village.name + ' for ' + formatNum(price) + ' gold', 'gold');
+  playSound('sell');
+}
+
+// ============================================================
+// SECTION 19: Prestige System
+// ============================================================
+function canPrestige() {
+  const infected = state.villages.filter(v => v.infected).length;
+  return infected >= 4;
+}
+
+function triggerPrestige() {
+  if (!canPrestige()) return;
+
+  const essenceGain = Math.max(1, Math.floor(Math.log2(Math.max(1, state.totalGoldEarned / 1000))));
+
+  // Show overlay
+  const overlay = document.getElementById('prestige-overlay');
+  overlay.classList.add('active');
+  document.getElementById('prestige-reward-text').textContent = '+' + essenceGain + ' Essence earned';
+  document.getElementById('game-container').classList.add('screen-shake');
+
+  startPrestigeParticles();
+  playSound('prestige');
+
+  setTimeout(() => {
+    document.getElementById('game-container').classList.remove('screen-shake');
+  }, 600);
+
+  // Store prestige click handler
+  document.getElementById('prestige-continue').onclick = function() {
+    overlay.classList.remove('active');
+    stopPrestigeParticles();
+
+    // Reset state but keep essence and discoveries
+    const keepEssence = state.essence + essenceGain;
+    const keepRecipes = [...state.discoveredRecipes];
+    const keepPandemics = state.totalPandemics + 1;
+    const keepMultiplier = 1 + keepPandemics * 0.25;
+
+    state = createDefaultState();
+    state.essence = keepEssence;
+    state.discoveredRecipes = keepRecipes;
+    state.totalPandemics = keepPandemics;
+    state.essenceMultiplier = keepMultiplier;
+    generateVillages();
+
+    addLog('A new kingdom rises. Essence multiplier: x' + keepMultiplier.toFixed(2), 'discovery');
+    updateAllUI();
+  };
+}
+
+// ============================================================
+// SECTION 20: Canvas Particle Systems
+// ============================================================
+let labParticles = [];
+let prestigeParticles = [];
+let prestigeAnimating = false;
+
+class Particle {
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.type = type;
+    this.life = 1.0;
+
+    switch(type) {
+      case 'smoke':
+        this.vx = (Math.random() - 0.5) * 0.4;
+        this.vy = -Math.random() * 1.2 - 0.4;
+        this.decay = 0.004 + Math.random() * 0.006;
+        this.size = 6 + Math.random() * 10;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.rotSpeed = (Math.random() - 0.5) * 0.015;
+        this.color = `rgba(120,120,120,`;
+        break;
+      case 'bubble':
+        this.vx = (Math.random() - 0.5) * 0.3;
+        this.vy = -Math.random() * 1.5 - 0.5;
+        this.decay = 0.008 + Math.random() * 0.008;
+        this.size = 2 + Math.random() * 3;
+        this.color = `rgba(200,220,255,`;
+        break;
+      case 'spark':
+        this.vx = (Math.random() - 0.5) * 2;
+        this.vy = -Math.random() * 3 - 1;
+        this.decay = 0.015 + Math.random() * 0.02;
+        this.size = 1 + Math.random() * 2;
+        this.color = `rgba(255,200,50,`;
+        break;
+      case 'dust':
+        this.vx = (Math.random() - 0.5) * 0.15;
+        this.vy = (Math.random() - 0.5) * 0.1;
+        this.decay = 0.001 + Math.random() * 0.002;
+        this.size = 1 + Math.random() * 1.5;
+        this.color = `rgba(200,180,140,`;
+        break;
+      case 'skull':
+        this.vx = (Math.random() - 0.5) * 1;
+        this.vy = -Math.random() * 2 - 0.5;
+        this.decay = 0.003;
+        this.size = 14 + Math.random() * 10;
+        this.rotation = (Math.random() - 0.5) * 0.3;
+        break;
+      case 'toxic':
+        this.vx = (Math.random() - 0.5) * 0.8;
+        this.vy = -Math.random() * 0.5 - 0.2;
+        this.decay = 0.002 + Math.random() * 0.003;
+        this.size = 20 + Math.random() * 30;
+        this.color = `rgba(57,255,20,`;
+        break;
+    }
+  }
+
+  update(dt) {
+    const f = dt * 60;
+    this.x += this.vx * f;
+    this.y += this.vy * f;
+    this.life -= this.decay * f;
+
+    if (this.type === 'smoke') {
+      this.vx += (Math.random() - 0.5) * 0.08;
+      this.size += 0.2 * f;
+      this.rotation += this.rotSpeed * f;
+    } else if (this.type === 'spark') {
+      this.vy += 0.05 * f; // gravity
+    }
+  }
+
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.save();
+
+    if (this.type === 'smoke') {
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      ctx.globalAlpha = this.life * 0.25;
+      ctx.fillStyle = '#888';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, this.size, this.size * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === 'bubble') {
+      ctx.globalAlpha = this.life * 0.5;
+      ctx.strokeStyle = this.color + (this.life * 0.6) + ')';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.stroke();
+      // Highlight
+      ctx.fillStyle = 'rgba(255,255,255,' + (this.life * 0.3) + ')';
+      ctx.beginPath();
+      ctx.arc(this.x - this.size * 0.3, this.y - this.size * 0.3, this.size * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === 'spark') {
+      ctx.globalAlpha = this.life;
+      ctx.fillStyle = 'rgba(255,' + Math.floor(150 + 105 * this.life) + ',50,' + this.life + ')';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === 'dust') {
+      ctx.globalAlpha = this.life * 0.15;
+      ctx.fillStyle = '#C8B88C';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === 'skull') {
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.rotation);
+      ctx.globalAlpha = this.life * 0.6;
+      ctx.fillStyle = `rgba(57,255,20,${this.life * 0.7})`;
+      ctx.font = this.size + 'px Georgia';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u2620', 0, 0);
+    } else if (this.type === 'toxic') {
+      ctx.globalAlpha = this.life * 0.12;
+      ctx.fillStyle = `rgba(57,255,20,${this.life * 0.15})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+function emitLabParticles(canvas) {
+  if (labParticles.length >= CONFIG.PARTICLE_CAP) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Smoke from cauldron
+  if (Math.random() < 0.3) {
+    labParticles.push(new Particle(w * 0.5 + (Math.random()-0.5) * 40, h * 0.62, 'smoke'));
+  }
+
+  // Bubbles from flasks (if generators owned)
+  const totalGens = Object.values(state.generators).reduce((s,v) => s + v, 0);
+  if (totalGens > 0 && Math.random() < 0.15) {
+    const fx = w * (0.15 + Math.random() * 0.7);
+    const fy = h * (0.2 + Math.random() * 0.25);
+    labParticles.push(new Particle(fx, fy, 'bubble'));
+  }
+
+  // Sparks from fire
+  if (Math.random() < 0.1) {
+    labParticles.push(new Particle(w * 0.5 + (Math.random()-0.5) * 30, h * 0.76, 'spark'));
+  }
+
+  // Dust motes
+  if (Math.random() < 0.05) {
+    labParticles.push(new Particle(Math.random() * w, Math.random() * h * 0.6, 'dust'));
+  }
+}
+
+function renderLabCanvas(dt) {
+  const canvas = document.getElementById('lab-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  if (canvas.width !== canvas.offsetWidth || canvas.height !== canvas.offsetHeight) {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  emitLabParticles(canvas);
+
+  for (let i = labParticles.length - 1; i >= 0; i--) {
+    labParticles[i].update(dt);
+    labParticles[i].draw(ctx);
+    if (labParticles[i].life <= 0) {
+      labParticles.splice(i, 1);
+    }
+  }
+}
+
+// ============================================================
+// SECTION 21: Map Canvas Rendering
+// ============================================================
+let mapAnimTime = 0;
+
+function renderMapCanvas(dt) {
+  const canvas = document.getElementById('map-canvas');
+  if (!canvas || state.currentView !== 'map') return;
+  const ctx = canvas.getContext('2d');
+
+  if (canvas.width !== canvas.offsetWidth || canvas.height !== canvas.offsetHeight) {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+
+  const w = canvas.width;
+  const h = canvas.height;
+  mapAnimTime += dt;
+
+  // Background
+  ctx.fillStyle = '#1a1008';
+  ctx.fillRect(0, 0, w, h);
+
+  // Parchment-like map background
+  const grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w,h) * 0.6);
+  grad.addColorStop(0, 'rgba(80,60,30,0.15)');
+  grad.addColorStop(1, 'rgba(20,14,6,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw roads
+  ctx.strokeStyle = 'rgba(139,109,20,0.2)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  for (const conn of (state.villageConnections || [])) {
+    const v1 = state.villages[conn[0]];
+    const v2 = state.villages[conn[1]];
+    ctx.beginPath();
+    const cx = (v1.x + v2.x) / 2 * w + (Math.sin(conn[0] + conn[1]) * 20);
+    const cy = (v1.y + v2.y) / 2 * h + (Math.cos(conn[0] + conn[1]) * 20);
+    ctx.moveTo(v1.x * w, v1.y * h);
+    ctx.quadraticCurveTo(cx, cy, v2.x * w, v2.y * h);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Infection spread arcs
+  for (const v of state.villages) {
+    if (v.infected && v.health < 50) {
+      for (const conn of (state.villageConnections || [])) {
+        let neighborIdx = -1;
+        if (conn[0] === v.id) neighborIdx = conn[1];
+        else if (conn[1] === v.id) neighborIdx = conn[0];
+        if (neighborIdx >= 0) {
+          const neighbor = state.villages[neighborIdx];
+          if (!neighbor.infected && neighbor.health > 0) {
+            // Animated pulse along road
+            const progress = (mapAnimTime * 0.5) % 1;
+            const px = v.x * w + (neighbor.x * w - v.x * w) * progress;
+            const py = v.y * h + (neighbor.y * h - v.y * h) * progress;
+            ctx.beginPath();
+            ctx.arc(px, py, 4, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(239,83,80,${0.6 * (1 - progress)})`;
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
+
+  // Draw villages
+  for (const v of state.villages) {
+    const vx = v.x * w;
+    const vy = v.y * h;
+    const radius = 8 + v.population / 30;
+
+    // Health-based color
+    let r, g, b;
+    if (v.health > 60) {
+      const t = (v.health - 60) / 40;
+      r = Math.floor(255 * (1 - t) + 76 * t);
+      g = Math.floor(193 * (1 - t) + 175 * t);
+      b = Math.floor(7 * (1 - t) + 80 * t);
+    } else if (v.health > 20) {
+      const t = (v.health - 20) / 40;
+      r = Math.floor(255 * (1 - t) + 255 * t);
+      g = Math.floor(87 * (1 - t) + 193 * t);
+      b = Math.floor(34 * (1 - t) + 7 * t);
+    } else {
+      const t = v.health / 20;
+      r = Math.floor(33 * (1 - t) + 255 * t);
+      g = Math.floor(33 * (1 - t) + 87 * t);
+      b = Math.floor(33 * (1 - t) + 34 * t);
+    }
+
+    // Infection glow
+    if (v.infected) {
+      const pulse = 0.5 + 0.5 * Math.sin(mapAnimTime * 3 + v.id);
+      ctx.beginPath();
+      ctx.arc(vx, vy, radius + 10 + pulse * 5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(183,28,28,${0.1 + pulse * 0.1})`;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(vx, vy, radius + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(239,83,80,${0.3 + pulse * 0.3})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Village circle
+    ctx.beginPath();
+    ctx.arc(vx, vy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(200,180,140,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Inner highlight
+    ctx.beginPath();
+    ctx.arc(vx - radius * 0.2, vy - radius * 0.2, radius * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fill();
+
+    // Skull for dead villages
+    if (v.health <= 0) {
+      ctx.fillStyle = 'rgba(200,200,200,0.8)';
+      ctx.font = (radius * 1.2) + 'px Georgia';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('\u2620', vx, vy);
+    }
+
+    // Village name
+    ctx.fillStyle = 'rgba(245,230,200,0.7)';
+    ctx.font = '11px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText(v.name, vx, vy + radius + 14);
+
+    // Health bar under name
+    const barW = 40;
+    const barH = 3;
+    const barX = vx - barW/2;
+    const barY = vy + radius + 18;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(barX, barY, barW * (v.health/100), barH);
+  }
+
+  // Title
+  ctx.fillStyle = 'rgba(255,213,79,0.4)';
+  ctx.font = '14px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText('Kingdom ' + (state.totalPandemics + 1), w/2, 25);
+}
+
+// Map click handling
+function handleMapClick(e) {
+  const canvas = document.getElementById('map-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
+
+  let closest = null;
+  let closestDist = Infinity;
+  for (const v of state.villages) {
+    const dx = v.x - mx;
+    const dy = v.y - my;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 0.05 && dist < closestDist) {
+      closest = v;
+      closestDist = dist;
+    }
+  }
+
+  if (closest) {
+    showVillagePopup(closest, e.clientX, e.clientY);
+  } else {
+    hideVillagePopup();
+  }
+}
+
+function showVillagePopup(village, px, py) {
+  state.selectedVillage = village.id;
+  const popup = document.getElementById('village-popup');
+  popup.style.display = 'block';
+
+  // Position
+  const maxX = window.innerWidth - 260;
+  const maxY = window.innerHeight - 300;
+  popup.style.left = Math.min(px + 10, maxX) + 'px';
+  popup.style.top = Math.min(py + 10, maxY) + 'px';
+
+  document.getElementById('popup-title').textContent = village.name;
+  document.getElementById('popup-pop').textContent = village.population;
+  document.getElementById('popup-health-text').textContent = Math.floor(village.health) + '/100';
+
+  const healthFill = document.getElementById('popup-health-fill');
+  healthFill.style.width = village.health + '%';
+  if (village.health > 60) healthFill.style.background = '#4CAF50';
+  else if (village.health > 20) healthFill.style.background = '#FF9800';
+  else healthFill.style.background = '#F44336';
+
+  document.getElementById('popup-demand').textContent = 'x' + village.demandMultiplier.toFixed(1);
+
+  const plagueStatus = document.getElementById('popup-plague-status');
+  if (village.infected) {
+    const recipe = RECIPES.find(r => r.id === village.plagueId);
+    plagueStatus.innerHTML = 'Plague: <span style="color:#EF5350;">' + (recipe ? recipe.name : 'Unknown') + '</span>';
+  } else if (village.health <= 0) {
+    plagueStatus.innerHTML = '<span style="color:#666;">This village has perished.</span>';
+  } else {
+    plagueStatus.innerHTML = '<span style="color:#66BB6A;">Healthy</span>';
+  }
+
+  // Actions
+  const actions = document.getElementById('popup-actions');
+  actions.innerHTML = '';
+
+  if (village.health > 0) {
+    // Plague buttons
+    if (!village.infected) {
+      const plagues = RECIPES.filter(r => r.type === 'plague' && state.discoveredRecipes.includes(r.id));
+      for (const p of plagues) {
+        const count = (state.plagueInventory && state.plagueInventory[p.id]) || 0;
+        const btn = document.createElement('button');
+        btn.className = 'popup-btn plague';
+        btn.textContent = p.name + ' (' + count + ')';
+        btn.disabled = count <= 0;
+        btn.onclick = () => { deployPlague(village.id, p.id); showVillagePopup(village, parseInt(popup.style.left), parseInt(popup.style.top)); };
+        actions.appendChild(btn);
+      }
+    }
+
+    // Cure buttons
+    if (village.health < 100) {
+      const cures = RECIPES.filter(r => r.type === 'cure' && state.discoveredRecipes.includes(r.id));
+      for (const c of cures) {
+        const count = (state.cureInventory && state.cureInventory[c.id]) || 0;
+        const price = Math.floor(c.basePrice * village.demandMultiplier);
+        const btn = document.createElement('button');
+        btn.className = 'popup-btn cure';
+        btn.textContent = c.name + ' (' + count + ') +' + price + 'g';
+        btn.disabled = count <= 0;
+        btn.onclick = () => { sellCure(village.id, c.id); showVillagePopup(village, parseInt(popup.style.left), parseInt(popup.style.top)); };
+        actions.appendChild(btn);
+      }
+    }
+  }
+}
+
+function hideVillagePopup() {
+  document.getElementById('village-popup').style.display = 'none';
+  state.selectedVillage = null;
+}
+
+// ============================================================
+// SECTION 22: Prestige Particles
+// ============================================================
+let prestigeRAF = null;
+
+function startPrestigeParticles() {
+  prestigeAnimating = true;
+  prestigeParticles = [];
+  const canvas = document.getElementById('prestige-canvas');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  renderPrestigeFrame();
+}
+
+function renderPrestigeFrame() {
+  if (!prestigeAnimating) return;
+  const canvas = document.getElementById('prestige-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Emit
+  if (prestigeParticles.length < 80) {
+    if (Math.random() < 0.3) {
+      prestigeParticles.push(new Particle(Math.random() * canvas.width, canvas.height + 10, 'skull'));
+    }
+    if (Math.random() < 0.2) {
+      prestigeParticles.push(new Particle(Math.random() * canvas.width, canvas.height * 0.8 + Math.random() * canvas.height * 0.2, 'toxic'));
+    }
+  }
+
+  for (let i = prestigeParticles.length - 1; i >= 0; i--) {
+    prestigeParticles[i].update(1/60);
+    prestigeParticles[i].draw(ctx);
+    if (prestigeParticles[i].life <= 0) prestigeParticles.splice(i, 1);
+  }
+
+  prestigeRAF = requestAnimationFrame(renderPrestigeFrame);
+}
+
+function stopPrestigeParticles() {
+  prestigeAnimating = false;
+  if (prestigeRAF) cancelAnimationFrame(prestigeRAF);
+  prestigeParticles = [];
+}
+
+// ============================================================
+// SECTION 23: Audio (Web Audio API)
+// ============================================================
+let audioCtx = null;
+
+function initAudio() {
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch(e) {}
+}
+
+function playSound(type) {
+  if (!audioCtx) return;
+  try {
+    switch(type) {
+      case 'buy': {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+        break;
+      }
+      case 'sell': {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.06);
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+        // Second ping
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1000, audioCtx.currentTime + 0.06);
+        osc2.frequency.exponentialRampToValueAtTime(1400, audioCtx.currentTime + 0.12);
+        gain2.gain.setValueAtTime(0.03, audioCtx.currentTime + 0.06);
+        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+        osc2.connect(gain2).connect(audioCtx.destination);
+        osc2.start(audioCtx.currentTime + 0.06); osc2.stop(audioCtx.currentTime + 0.2);
+        break;
+      }
+      case 'brew': {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+        break;
+      }
+      case 'discover': {
+        [400, 500, 600, 800].forEach((freq, i) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime + i * 0.1);
+          gain.gain.setValueAtTime(0.035, audioCtx.currentTime + i * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.1 + 0.2);
+          osc.connect(gain).connect(audioCtx.destination);
+          osc.start(audioCtx.currentTime + i * 0.1);
+          osc.stop(audioCtx.currentTime + i * 0.1 + 0.2);
+        });
+        break;
+      }
+      case 'fail': {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+        break;
+      }
+      case 'plague': {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+        break;
+      }
+      case 'prestige': {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 2);
+        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 2);
+        break;
+      }
+    }
+  } catch(e) {}
+}
+
+// ============================================================
+// SECTION 24: UI Rendering
+// ============================================================
+function formatNum(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e4) return (n / 1e3).toFixed(1) + 'K';
+  return Math.floor(n).toLocaleString();
+}
+
+function updateCurrencyDisplay() {
+  document.getElementById('gold-display').textContent = formatNum(state.gold);
+  document.getElementById('gps-display').textContent = '(+' + formatNum(calcGoldPerSec()) + '/s)';
+  document.getElementById('essence-display').textContent = Math.floor(state.essence);
+}
+
+function updateGeneratorsUI() {
+  const container = document.getElementById('generators-list');
+  container.innerHTML = '';
+
+  for (const def of GENERATORS) {
+    const count = getGenCount(def.id);
+    const cost = getGeneratorCost(def, count);
+    const unlocked = state.totalGoldEarned >= def.unlockAt || count > 0;
+
+    const card = document.createElement('div');
+    card.className = 'generator-card';
+    if (!unlocked) card.classList.add('locked');
+    else if (state.gold < cost) card.classList.add('cant-afford');
+
+    if (!unlocked) {
+      card.innerHTML = `<div class="gen-name">???</div><div class="gen-desc">Unlocks at ${formatNum(def.unlockAt)} total gold</div>`;
+    } else {
+      card.innerHTML = `
+        <div class="gen-name">${def.name} <span class="gen-count">${count}</span></div>
+        <div class="gen-cost">Cost: ${formatNum(cost)} gold</div>
+        <div class="gen-output">+${def.baseGold * state.essenceMultiplier} gold/s each${def.ingredient ? ' | +' + def.ingredientRate + ' ' + def.ingredient + '/s' : ''}</div>
+        <div class="gen-desc">${def.desc}</div>
+      `;
+      card.onclick = () => buyGenerator(def.id);
+    }
+
+    container.appendChild(card);
+  }
+}
+
+function updateIngredientsUI() {
+  const container = document.getElementById('ingredients-list');
+  container.innerHTML = '';
+  for (const ing of INGREDIENTS) {
+    const count = Math.floor(state.ingredients[ing.id] || 0);
+    if (count > 0 || Object.values(state.generators).some(v => v > 0)) {
+      const row = document.createElement('div');
+      row.className = 'ingredient-row';
+      row.innerHTML = `<span style="color:${ing.color}">${ing.name}</span><span>${count}</span>`;
+      container.appendChild(row);
+    }
+  }
+}
+
+function updateCraftingUI() {
+  const slots = document.querySelectorAll('.craft-slot');
+  slots.forEach((slot, i) => {
+    const ingId = state.craftSlots[i];
+    if (ingId) {
+      const ing = INGREDIENTS.find(ig => ig.id === ingId);
+      slot.textContent = ing ? ing.name : ingId;
+      slot.classList.add('filled');
+      slot.style.borderColor = ing ? ing.color : '';
+    } else {
+      slot.textContent = 'Empty';
+      slot.classList.remove('filled');
+      slot.style.borderColor = '';
+    }
+  });
+
+  document.getElementById('brew-btn').disabled = !canBrew();
+}
+
+function updateFlasks() {
+  const container = document.getElementById('flasks-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const totalGens = Object.values(state.generators).reduce((s,v) => s+v, 0);
+  const flaskPositions = [
+    { left: '12%', top: '6%', hue: 45 },
+    { left: '22%', top: '6%', hue: 120 },
+    { left: '60%', top: '6%', hue: 0 },
+    { left: '72%', top: '6%', hue: 280 },
+    { left: '8%', top: '30%', hue: 200 },
+    { left: '20%', top: '30%', hue: 60 },
+    { left: '55%', top: '30%', hue: 340 },
+    { left: '68%', top: '30%', hue: 160 },
+    { left: '80%', top: '30%', hue: 30 },
+  ];
+
+  const count = Math.min(totalGens, flaskPositions.length);
+  for (let i = 0; i < count; i++) {
+    const pos = flaskPositions[i];
+    const fill = 30 + Math.random() * 50;
+    const flask = document.createElement('div');
+    flask.className = 'flask';
+    flask.style.left = pos.left;
+    flask.style.top = pos.top;
+    flask.innerHTML = `
+      <div class="flask-neck"></div>
+      <div class="flask-body">
+        <div class="flask-liquid" style="--fill:${fill}%;--hue:${pos.hue}"></div>
+        <div class="flask-bubble-el" style="--x:30%;--delay:${Math.random()*2}s"></div>
+        <div class="flask-bubble-el" style="--x:60%;--delay:${Math.random()*2+0.5}s"></div>
+        <div class="flask-drip-el" style="--hue:${pos.hue};--drip-delay:${Math.random()*4}s"></div>
+      </div>
+    `;
+    container.appendChild(flask);
+  }
+}
+
+function updateRecipeList() {
+  const container = document.getElementById('recipe-list');
+  container.innerHTML = '';
+
+  for (const recipe of RECIPES) {
+    const discovered = state.discoveredRecipes.includes(recipe.id);
+    const entry = document.createElement('div');
+    entry.className = 'recipe-entry' + (discovered ? '' : ' undiscovered') + (state.selectedRecipe === recipe.id ? ' active' : '');
+
+    if (discovered) {
+      entry.innerHTML = `
+        <div class="recipe-name">${recipe.name}</div>
+        <div class="recipe-type ${recipe.type}">${recipe.type}</div>
+      `;
+      entry.onclick = () => { state.selectedRecipe = recipe.id; updateRecipeList(); showRecipeDetail(recipe); };
+    } else {
+      entry.innerHTML = `<div class="recipe-name">Unknown Recipe</div><div class="recipe-type" style="color:var(--text-dim);">???</div>`;
+    }
+
+    container.appendChild(entry);
+  }
+}
+
+function showRecipeDetail(recipe) {
+  document.getElementById('recipe-empty-state').style.display = 'none';
+  const detail = document.getElementById('recipe-detail');
+  detail.style.display = 'flex';
+  detail.style.flexDirection = 'column';
+  detail.style.gap = '12px';
+
+  let effectText = '';
+  if (recipe.type === 'cure') {
+    effectText = `Heals ${recipe.healAmount} village health. Base price: ${recipe.basePrice} gold (scales with demand).`;
+  } else if (recipe.type === 'plague') {
+    effectText = `Deals ${recipe.damage} damage/sec. Spread rate: ${(recipe.spreadRate * 100).toFixed(0)}%.`;
+  } else {
+    effectText = recipe.essenceGain ? `Grants ${recipe.essenceGain} Essence.` : 'A mysterious substance.';
+  }
+
+  const inventoryCount = recipe.type === 'cure'
+    ? ((state.cureInventory && state.cureInventory[recipe.id]) || 0)
+    : recipe.type === 'plague'
+    ? ((state.plagueInventory && state.plagueInventory[recipe.id]) || 0)
+    : 0;
+
+  detail.innerHTML = `
+    <div class="detail-title">${recipe.name}</div>
+    <div class="detail-type recipe-type ${recipe.type}">${recipe.type}${inventoryCount > 0 ? ' -- In stock: ' + inventoryCount : ''}</div>
+    <div class="detail-desc">${recipe.desc}</div>
+    <div style="color:var(--text-dim);font-size:13px;">Ingredients Required:</div>
+    <div class="detail-ingredients">
+      ${recipe.ingredients.map(i => {
+        const ing = INGREDIENTS.find(ig => ig.id === i);
+        return `<div class="detail-ingredient" style="border-color:${ing.color}">${ing.name}</div>`;
+      }).join('')}
+    </div>
+    <div class="detail-effect">${effectText}</div>
+  `;
+}
+
+function updateStatusBar() {
+  const infectedCount = state.villages.filter(v => v.infected).length;
+  const plagueCount = state.activePlagues ? state.activePlagues.length : infectedCount;
+  document.getElementById('plague-count').textContent = infectedCount;
+  document.getElementById('infected-count').textContent = infectedCount + '/' + state.villages.length;
+  document.getElementById('recipe-count').textContent = state.discoveredRecipes.length + '/' + RECIPES.length;
+
+  // Prestige button
+  const btn = document.getElementById('prestige-btn');
+  if (canPrestige()) {
+    btn.classList.add('available');
+  } else {
+    btn.classList.remove('available');
+  }
+}
+
+function updateCorruptionPalette() {
+  const c = state.corruptionLevel;
+  // Shift cauldron hue from amber (45) to toxic green (120)
+  const cauldronHue = 45 + c * 75;
+  document.querySelector('.cauldron-liquid').style.setProperty('--cauldron-hue', cauldronHue);
+
+  // Darken overall ambiance
+  const container = document.getElementById('game-container');
+  if (c > 0.3) {
+    const toxicAlpha = (c - 0.3) * 0.15;
+    container.style.boxShadow = `inset 0 0 100px rgba(57,255,20,${toxicAlpha})`;
+  } else {
+    container.style.boxShadow = '';
+  }
+}
+
+function updateAllUI() {
+  updateCurrencyDisplay();
+  updateGeneratorsUI();
+  updateIngredientsUI();
+  updateCraftingUI();
+  updateRecipeList();
+  updateStatusBar();
+  updateFlasks();
+  updateCorruptionPalette();
+}
+
+// ============================================================
+// SECTION 25: Notification Log
+// ============================================================
+function addLog(text, type) {
+  const log = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + (type || '');
+  entry.textContent = text;
+  log.prepend(entry);
+  setTimeout(() => entry.remove(), 3000);
+
+  // Keep max 5
+  while (log.children.length > 5) {
+    log.lastChild.remove();
+  }
+}
+
+// ============================================================
+// SECTION 26: Ingredient Selector
+// ============================================================
+let activeSlotIdx = null;
+
+function showIngredientSelector(slotIdx, anchorEl) {
+  activeSlotIdx = slotIdx;
+  const selector = document.getElementById('ingredient-selector');
+  selector.innerHTML = '';
+
+  // Option to clear
+  if (state.craftSlots[slotIdx]) {
+    const opt = document.createElement('div');
+    opt.className = 'ingredient-option';
+    opt.innerHTML = '<span style="color:var(--text-dim)">Clear Slot</span>';
+    opt.onclick = () => { clearSlot(slotIdx); hideIngredientSelector(); };
+    selector.appendChild(opt);
+  }
+
+  for (const ing of INGREDIENTS) {
+    const count = Math.floor(state.ingredients[ing.id] || 0);
+    const opt = document.createElement('div');
+    opt.className = 'ingredient-option' + (count <= 0 ? ' disabled' : '');
+    opt.innerHTML = `<span style="color:${ing.color}">${ing.name}</span><span class="count">${count}</span>`;
+    if (count > 0) {
+      opt.onclick = () => { setSlot(slotIdx, ing.id); hideIngredientSelector(); };
+    }
+    selector.appendChild(opt);
+  }
+
+  const rect = anchorEl.getBoundingClientRect();
+  selector.style.left = rect.left + 'px';
+  selector.style.top = (rect.top - selector.offsetHeight - 5) + 'px';
+  selector.style.display = 'block';
+
+  // Reposition if off-screen
+  requestAnimationFrame(() => {
+    const selRect = selector.getBoundingClientRect();
+    if (selRect.top < 0) {
+      selector.style.top = (rect.bottom + 5) + 'px';
+    }
+    if (selRect.right > window.innerWidth) {
+      selector.style.left = (window.innerWidth - selRect.width - 10) + 'px';
+    }
+  });
+}
+
+function hideIngredientSelector() {
+  document.getElementById('ingredient-selector').style.display = 'none';
+  activeSlotIdx = null;
+}
+
+// ============================================================
+// SECTION 27: Event Handlers
+// ============================================================
+function setupEventHandlers() {
+  // Nav tabs
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const view = tab.dataset.view;
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelector(`.view[data-name="${view}"]`).classList.add('active');
+      state.currentView = view;
+      hideVillagePopup();
+    });
+  });
+
+  // Craft slots
+  document.querySelectorAll('.craft-slot').forEach(slot => {
+    slot.addEventListener('click', (e) => {
+      const idx = parseInt(slot.dataset.slot);
+      showIngredientSelector(idx, slot);
+      e.stopPropagation();
+    });
+  });
+
+  // Brew button
+  document.getElementById('brew-btn').addEventListener('click', brew);
+
+  // Map click
+  document.getElementById('map-canvas').addEventListener('click', handleMapClick);
+
+  // Close popup
+  document.getElementById('popup-close').addEventListener('click', hideVillagePopup);
+
+  // Prestige button
+  document.getElementById('prestige-btn').addEventListener('click', triggerPrestige);
+
+  // Click outside to close selector
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#ingredient-selector') && !e.target.closest('.craft-slot')) {
+      hideIngredientSelector();
+    }
+  });
+
+  // Init audio on first interaction
+  document.addEventListener('click', function initAudioOnce() {
+    initAudio();
+    document.removeEventListener('click', initAudioOnce);
+  }, { once: true });
+}
+
+// ============================================================
+// SECTION 28: Core Game Loop
+// ============================================================
+let lastTime = performance.now();
+let tickAccum = 0;
+let uiUpdateAccum = 0;
+let saveAccum = 0;
+
+function gameLoop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.1); // cap at 100ms
+  lastTime = now;
+
+  tickAccum += dt;
+  uiUpdateAccum += dt;
+  saveAccum += dt;
+
+  // Fixed tick at 100ms
+  while (tickAccum >= CONFIG.TICK_MS / 1000) {
+    const tickDt = CONFIG.TICK_MS / 1000;
+    updateGenerators(tickDt);
+    updateVillages(tickDt);
+    state.totalTimePlayed += tickDt;
+    tickAccum -= tickDt;
+  }
+
+  // UI update at ~10fps
+  if (uiUpdateAccum >= 0.1) {
+    updateCurrencyDisplay();
+    updateIngredientsUI();
+    updateStatusBar();
+    updateCorruptionPalette();
+    updateCraftingUI();
+
+    // Refresh village popup if open
+    if (state.selectedVillage !== null) {
+      const v = state.villages.find(vi => vi.id === state.selectedVillage);
+      if (v) {
+        const popup = document.getElementById('village-popup');
+        if (popup.style.display === 'block') {
+          document.getElementById('popup-health-text').textContent = Math.floor(v.health) + '/100';
+          const healthFill = document.getElementById('popup-health-fill');
+          healthFill.style.width = v.health + '%';
+          if (v.health > 60) healthFill.style.background = '#4CAF50';
+          else if (v.health > 20) healthFill.style.background = '#FF9800';
+          else healthFill.style.background = '#F44336';
+          document.getElementById('popup-demand').textContent = 'x' + v.demandMultiplier.toFixed(1);
+        }
+      }
+    }
+
+    uiUpdateAccum = 0;
+  }
+
+  // Generators UI at ~2fps (costly)
+  if (Math.floor(now / 500) !== Math.floor((now - dt * 1000) / 500)) {
+    updateGeneratorsUI();
+  }
+
+  // Save
+  if (saveAccum >= CONFIG.SAVE_INTERVAL / 1000) {
+    saveGame();
+    saveAccum = 0;
+  }
+
+  // Render canvases
+  if (state.currentView === 'lab') {
+    renderLabCanvas(dt);
+  } else if (state.currentView === 'map') {
+    renderMapCanvas(dt);
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// SECTION 29: Init
+// ============================================================
+function init() {
+  loadGame();
+
+  // Ensure inventories exist
+  if (!state.cureInventory) state.cureInventory = {};
+  if (!state.plagueInventory) state.plagueInventory = {};
+  if (!state.villageConnections) {
+    // Rebuild connections
+    state.villageConnections = [];
+    for (let i = 0; i < state.villages.length; i++) {
+      for (let j = i + 1; j < state.villages.length; j++) {
+        const dx = state.villages[i].x - state.villages[j].x;
+        const dy = state.villages[i].y - state.villages[j].y;
+        if (Math.sqrt(dx*dx + dy*dy) < 0.38) {
+          state.villageConnections.push([i, j]);
+        }
+      }
+    }
+  }
+
+  setupEventHandlers();
+  updateAllUI();
+
+  // Start loop
+  lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+
+  // Save on unload
+  window.addEventListener('beforeunload', saveGame);
+}
+
+init();
+</script>
+</body>
+</html>
